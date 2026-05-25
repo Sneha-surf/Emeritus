@@ -8,11 +8,11 @@ Usage:
   Open http://localhost:5000
 """
 from flask import Flask, request, Response, send_file, jsonify
-import subprocess, json, os
+import subprocess, json, os, sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).parent.resolve()
-VENV_PY  = str(BASE_DIR / 'venv/bin/python3')
+VENV_PY  = sys.executable   # use whichever Python is running the server (cross-platform)
 PIPELINE = str(BASE_DIR / 'backend/pipeline.py')
 
 MEDIA_EXTS = {'.mp4', '.mov', '.avi', '.mkv', '.webm', '.pptx'}
