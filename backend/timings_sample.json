@@ -1,0 +1,6 @@
+[
+  { "slide": 0, "start": 0.0,  "end": 12.0 },
+  { "slide": 1, "start": 12.0, "end": 28.5 },
+  { "slide": 2, "start": 28.5, "end": 45.0 },
+  { "slide": 3, "start": 45.0, "end": 60.0 }
+]

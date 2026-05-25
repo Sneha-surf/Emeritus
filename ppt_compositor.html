@@ -1,0 +1,2306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PPT + GreenScreen Compositor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0d1117;
+      --surface:     #161b22;
+      --surface2:    #21262d;
+      --surface3:    #2d333b;
+      --border:      #30363d;
+      --green:       #3fb950;
+      --green-dim:   #238636;
+      --green-faint: rgba(63,185,80,.10);
+      --text:        #e6edf3;
+      --text2:       #c9d1d9;
+      --muted:       #8b949e;
+      --muted2:      #484f58;
+      --danger:      #f85149;
+      --amber:       #e3b341;
+      --blue:        #79c0ff;
+      --radius:      12px;
+      --radius-sm:   8px;
+      --radius-xs:   6px;
+      --sans:        'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      --mono:        'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      min-height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      font-size: clamp(12px, 1.1vw, 14px);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Header ───────────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 0 28px;
+      height: 56px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      flex-shrink: 0;
+    }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { width: 32px; height: 32px; border-radius: 8px; background: var(--green); display: flex; align-items: center; justify-content: center; }
+    .logo-icon svg { width: 17px; height: 17px; fill: none; stroke: #000; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+    .logo-text { font-size: 17px; font-weight: 700; letter-spacing: -.4px; color: var(--text); }
+    .logo-text span { color: var(--green); }
+    .header-badge { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--muted); border: 1px solid var(--border); padding: 3px 12px; border-radius: 20px; letter-spacing: 1.2px; }
+
+    /* ── App grid ─────────────────────────────────────────────────────────── */
+    .app { display: grid; grid-template-columns: 1fr clamp(300px, 28vw, 420px); gap: clamp(12px, 1.5vw, 20px); flex: 1; width: 100%; padding: clamp(12px, 1.5vw, 20px) clamp(14px, 2vw, 24px); align-items: start; }
+    .left { display: flex; flex-direction: column; gap: clamp(10px, 1vw, 14px); min-width: 0; }
+    .input-row { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(10px, 1vw, 14px); }
+
+    /* ── Video / image cards ──────────────────────────────────────────────── */
+    .vic { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; transition: border-color .2s; }
+    .vic.active-border { border-color: var(--green-dim); }
+    .vic-header { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border); background: var(--surface2); }
+    .vic-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .dot-fg { background: var(--green); }
+    .dot-bg { background: var(--blue); }
+    .vic-label { font-family: var(--mono); font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 1.2px; text-transform: uppercase; }
+    .vic-preview { height: clamp(130px, 14vw, 190px); display: flex; align-items: center; justify-content: center; background: #090c10; overflow: hidden; }
+    .vic-preview video, .vic-preview img { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .vic-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; color: var(--muted2); font-size: 13px; text-align: center; padding: 16px; }
+    .vic-empty svg { width: 28px; height: 28px; opacity: .18; }
+    .vic-footer { padding: 10px 12px; }
+    .upload-btn { width: 100%; background: transparent; border: 1px dashed var(--border); color: var(--muted); padding: 9px 14px; border-radius: var(--radius-sm); font-family: var(--sans); font-size: 13px; cursor: pointer; transition: all .2s; text-align: center; }
+    .upload-btn:hover { border-color: var(--green-dim); color: var(--green); background: var(--green-faint); }
+    .upload-btn.has-file { border-style: solid; border-color: var(--green-dim); color: var(--green); background: var(--green-faint); }
+
+    /* ── Canvas ───────────────────────────────────────────────────────────── */
+    .canvas-zone { background: #090c10; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; position: relative; aspect-ratio: 16/9; min-height: 200px; display: flex; align-items: center; justify-content: center; }
+    .canvas-zone canvas { max-width: 100%; max-height: 100%; display: block; }
+    .placeholder { display: flex; flex-direction: column; align-items: center; gap: 14px; color: var(--muted); padding: 64px 48px; text-align: center; }
+    .placeholder svg { width: 52px; height: 52px; opacity: .10; }
+    .placeholder p { font-size: 15px; line-height: 1.8; color: var(--muted); }
+    .placeholder small { font-size: 13px; color: var(--muted2); }
+
+    #status-bar { position: absolute; top: 12px; left: 12px; font-family: var(--mono); font-size: 12px; padding: 5px 14px; border-radius: 20px; background: rgba(13,17,23,.92); border: 1px solid var(--border); color: var(--muted); letter-spacing: 1px; backdrop-filter: blur(4px); }
+    #status-bar.active { color: var(--green); border-color: var(--green-dim); }
+    #status-bar.recording { color: var(--danger); border-color: var(--danger); animation: blink 1s infinite; }
+    #position-badge { position: absolute; top: 12px; right: 12px; font-family: var(--mono); font-size: 12px; padding: 5px 14px; border-radius: 20px; background: rgba(13,17,23,.9); border: 1px solid var(--border); color: var(--muted); letter-spacing: 1.2px; font-weight: 600; transition: all .3s; }
+    #position-badge.centered { color: var(--blue); border-color: var(--blue); }
+    #position-badge.right { color: var(--amber); border-color: var(--amber); }
+    #position-badge.manual { color: var(--muted); border-color: var(--border); }
+    #position-badge.hidden { color: #555; border-color: #444; }
+    #position-badge.replace { color: var(--green); border-color: var(--green-dim); }
+    #content-badge { position: absolute; bottom: 12px; left: 12px; font-family: var(--mono); font-size: 12px; padding: 4px 12px; border-radius: 5px; background: rgba(13,17,23,.9); border: 1px solid var(--border); color: var(--muted); letter-spacing: .8px; }
+    #content-badge.left { color: var(--amber); border-color: var(--amber); }
+    #content-badge.none { color: var(--blue); border-color: var(--blue); }
+    #content-badge.full { color: var(--muted); border-color: #444; }
+    #content-badge.person { color: var(--green); border-color: var(--green-dim); }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    /* ── Slide thumbnails ─────────────────────────────────────────────────── */
+    .thumb-strip-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .thumb-strip-header { padding: 9px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface2); }
+    .thumb-strip-header > span { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 1.2px; text-transform: uppercase; }
+    #slide-counter { font-family: var(--mono); font-size: 12px; color: var(--green); }
+    .thumb-strip { display: flex; gap: 8px; padding: 10px 12px; overflow-x: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .thumb-strip::-webkit-scrollbar { height: 4px; }
+    .thumb-strip::-webkit-scrollbar-track { background: transparent; }
+    .thumb-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+    .thumb { position: relative; flex-shrink: 0; width: 120px; height: 68px; border-radius: 6px; overflow: hidden; cursor: pointer; border: 2px solid transparent; transition: border-color .15s; background: #0a0d10; }
+    .thumb:hover { border-color: var(--green-dim); }
+    .thumb.active { border-color: var(--green); box-shadow: 0 0 0 1px var(--green); }
+    .thumb.active::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 3px; background: var(--green); }
+    .thumb img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb-label { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,.75); font-size: 10px; text-align: center; padding: 3px 0; color: var(--muted); }
+    .thumb.active .thumb-label { background: rgba(35,134,54,.9); color: #fff; font-weight: 700; }
+    .thumb-badge { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; }
+    .thumb-del { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 3px; background: rgba(180,40,40,.85); color: #fff; font-size: 12px; line-height: 18px; text-align: center; cursor: pointer; opacity: 0; transition: opacity .15s; border: none; padding: 0; }
+    .thumb:hover .thumb-del { opacity: 1; }
+    .thumb-badge.content { background: var(--amber); }
+    .thumb-badge.blank { background: var(--blue); }
+    .thumb-badge.full { background: #555; }
+    .thumb-badge.person { background: var(--green); }
+
+    /* ── Timing editor ────────────────────────────────────────────────────── */
+    #timing-editor-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: visible; display: none; }
+    .timing-editor-header { padding: 9px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; background: var(--surface2); }
+    .timing-editor-header > span { font-family: var(--mono); font-size: 11px; color: var(--muted); letter-spacing: 1.2px; text-transform: uppercase; }
+    .timing-editor-header button { background: transparent; border: 1px solid var(--border); color: var(--muted); font-size: 12px; font-family: var(--sans); padding: 4px 10px; border-radius: 5px; cursor: pointer; transition: all .15s; }
+    .timing-editor-header button:hover { border-color: var(--green-dim); color: var(--green); background: var(--green-faint); }
+    #timing-track { position: relative; height: 48px; margin: 12px 14px; border-radius: 6px; overflow: visible; background: #0a0d10; user-select: none; }
+    .timing-seg { position: absolute; top: 0; bottom: 0; cursor: pointer; border-right: 1px solid rgba(0,0,0,.6); overflow: hidden; box-sizing: border-box; transition: filter .1s; }
+    .timing-seg:hover { filter: brightness(1.35); }
+    .timing-seg.t-active { outline: 2px solid var(--green); outline-offset: -1px; z-index: 2; }
+    .timing-seg-num { font-size: 10px; color: rgba(255,255,255,.85); position: absolute; top: 3px; left: 4px; font-family: var(--mono); pointer-events: none; white-space: nowrap; }
+    .timing-seg-dur { font-size: 9px; color: rgba(255,255,255,.45); position: absolute; bottom: 3px; left: 4px; font-family: var(--mono); pointer-events: none; white-space: nowrap; }
+    .timing-handle { position: absolute; top: 2px; bottom: 2px; width: 7px; right: -4px; cursor: ew-resize; z-index: 6; background: rgba(255,255,255,.2); border-radius: 3px; }
+    .timing-handle:hover, .timing-handle.dragging { background: var(--green); }
+    #timing-playhead { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--green); pointer-events: none; z-index: 8; }
+    #timing-playhead::before { content: ''; position: absolute; top: 0; left: -4px; border: 5px solid transparent; border-top-color: var(--green); }
+
+    /* ── Playback bar ─────────────────────────────────────────────────────── */
+    .playback-bar { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .ctrl-btn { background: transparent; border: 1px solid var(--border); color: var(--text2); border-radius: var(--radius-xs); padding: 6px 12px; font-family: var(--sans); font-size: 13px; font-weight: 500; cursor: pointer; transition: all .15s; white-space: nowrap; }
+    .ctrl-btn:hover:not(:disabled) { border-color: var(--green-dim); color: var(--green); background: var(--green-faint); }
+    .ctrl-btn:disabled { opacity: .3; cursor: not-allowed; }
+    .ctrl-btn.rec { border-color: var(--danger); color: var(--danger); }
+    .ctrl-btn.rec:hover:not(:disabled) { background: rgba(248,81,73,.1); }
+    .ctrl-btn.slide-nav:hover:not(:disabled) { border-color: var(--blue); color: var(--blue); background: rgba(121,192,255,.06); }
+    .ctrl-btn.dl-active { border-color: var(--green-dim); color: var(--green); background: var(--green-faint); }
+    #timeline { flex: 1; accent-color: var(--green); cursor: pointer; height: 4px; }
+    .time-disp { font-family: var(--mono); font-size: 13px; color: var(--muted); min-width: 88px; text-align: right; font-variant-numeric: tabular-nums; }
+
+    /* ── Right panel ──────────────────────────────────────────────────────── */
+    .panel { display: flex; flex-direction: column; gap: 8px; position: sticky; top: 76px; max-height: calc(100dvh - 76px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; padding-bottom: 16px; }
+    .panel::-webkit-scrollbar { width: 4px; }
+    .panel::-webkit-scrollbar-track { background: transparent; }
+    .panel::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+    /* ── Cards ────────────────────────────────────────────────────────────── */
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+    .card-title {
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      padding: 8px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+      font-family: var(--mono);
+    }
+    .card-body { padding: 12px 14px; }
+
+    /* ── Sliders ──────────────────────────────────────────────────────────── */
+    .slider-row { margin-bottom: 9px; }
+    .slider-row:last-child { margin-bottom: 0; }
+    .slider-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; }
+    .slider-label span:first-child { font-size: 13px; color: var(--text2); }
+    .slider-label span:last-child { font-family: var(--mono); font-size: 13px; color: var(--green); font-weight: 500; font-variant-numeric: tabular-nums; }
+    input[type=range] { width: 100%; accent-color: var(--green); cursor: pointer; height: 4px; }
+
+    /* ── Color row ────────────────────────────────────────────────────────── */
+    .color-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    input[type=color] { width: 32px; height: 28px; border: 1px solid var(--border); border-radius: 5px; background: none; cursor: pointer; padding: 2px; }
+    .color-label { font-size: 13px; color: var(--text2); }
+
+    /* ── Chips ────────────────────────────────────────────────────────────── */
+    .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+    .chip { font-size: 12px; padding: 3px 12px; border-radius: 20px; border: 1px solid var(--border); color: var(--muted); cursor: pointer; transition: all .15s; user-select: none; }
+    .chip:hover, .chip.active { border-color: var(--green-dim); color: var(--green); background: var(--green-faint); }
+
+    /* ── Position grid ────────────────────────────────────────────────────── */
+    .pos-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 5px; margin-bottom: 8px; }
+    .pos-btn { background: transparent; border: 1px solid var(--border); border-radius: var(--radius-xs); padding: 5px; font-size: 15px; cursor: pointer; text-align: center; transition: all .15s; line-height: 1; color: var(--muted); }
+    .pos-btn:hover, .pos-btn.active { border-color: var(--green-dim); background: var(--green-faint); color: var(--green); }
+
+    /* ── Buttons ──────────────────────────────────────────────────────────── */
+    .action-btn { width: 100%; padding: 9px 14px; border-radius: var(--radius-sm); font-family: var(--sans); font-size: 13px; font-weight: 600; cursor: pointer; border: none; transition: all .2s; letter-spacing: .2px; }
+    .btn-primary { background: var(--green); color: #000; }
+    .btn-primary:hover:not(:disabled) { background: #56d364; }
+    .btn-primary:disabled { background: var(--surface2); color: var(--muted2); cursor: not-allowed; border: 1px solid var(--border); }
+
+    /* ── Toggle ───────────────────────────────────────────────────────────── */
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+    .toggle-label { font-size: 13px; color: var(--text2); }
+    .toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider { position: absolute; inset: 0; background: var(--border); border-radius: 20px; cursor: pointer; transition: background .2s; }
+    .toggle-slider::before { content: ''; position: absolute; height: 14px; width: 14px; left: 3px; bottom: 3px; background: var(--muted); border-radius: 50%; transition: transform .2s, background .2s; }
+    .toggle input:checked + .toggle-slider { background: var(--green-dim); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(16px); background: var(--green); }
+
+    /* ── Mode pills ───────────────────────────────────────────────────────── */
+    .mode-display { display: flex; gap: 5px; margin-bottom: 8px; }
+    .mode-pill { flex: 1; text-align: center; padding: 6px 2px; border-radius: 6px; font-family: var(--mono); font-size: 10px; font-weight: 600; letter-spacing: .6px; border: 1px solid var(--border); color: var(--muted2); transition: all .2s; }
+    .mode-pill.active-center  { border-color: var(--blue);  color: var(--blue);  background: rgba(121,192,255,.08); }
+    .mode-pill.active-right   { border-color: var(--amber); color: var(--amber); background: rgba(227,179,65,.08); }
+    .mode-pill.active-hidden  { border-color: #3a3a3a; color: #555; background: rgba(255,255,255,.02); }
+    .mode-pill.active-replace { border-color: var(--green); color: var(--green); background: var(--green-faint); }
+
+    /* ── Footer ───────────────────────────────────────────────────────────── */
+    footer { border-top: 1px solid var(--border); padding: 10px 24px; font-family: var(--mono); font-size: 12px; color: var(--muted); display: flex; gap: 24px; background: var(--surface); flex-shrink: 0; }
+    .stat { display: flex; gap: 8px; align-items: center; }
+    #dl-link { display: none; }
+
+    /* ── Drop overlay ─────────────────────────────────────────────────────── */
+    .drop-overlay { position: fixed; inset: 0; background: rgba(63,185,80,.06); border: 2px dashed var(--green); z-index: 100; display: flex; align-items: center; justify-content: center; font-family: var(--sans); font-size: 22px; font-weight: 600; color: var(--green); pointer-events: none; opacity: 0; transition: opacity .15s; }
+    .drop-overlay.visible { opacity: 1; }
+
+    .hint { font-size: 12px; color: var(--muted2); line-height: 1.7; margin-top: 6px; }
+
+    /* ── Backend / Generate MP4 fields ───────────────────────────────────── */
+    .be-select, .be-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: var(--radius-sm);
+      font-family: var(--sans);
+      font-size: 13px;
+      margin-top: 4px;
+      transition: border-color .15s;
+      -webkit-appearance: none;
+    }
+    .be-select { appearance: none; }
+    .be-select:focus, .be-input:focus { outline: none; border-color: var(--green-dim); }
+
+    .be-log-box { margin-top: 6px; background: #090c10; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 10px; max-height: 110px; overflow-y: auto; }
+    .be-log-lines { font-family: var(--mono); font-size: 12px; color: var(--muted); line-height: 1.9; white-space: pre-wrap; word-break: break-all; }
+
+    .be-dl { display: block; width: 100%; text-align: center; text-decoration: none; background: var(--green); color: #000; padding: 9px 14px; border-radius: var(--radius-sm); font-family: var(--sans); font-size: 13px; font-weight: 600; margin-top: 8px; transition: background .2s; }
+    .be-dl:hover { background: #56d364; }
+
+    .card-section { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+    .card-section-label { font-size: 12px; color: var(--muted); letter-spacing: .8px; text-transform: uppercase; margin-bottom: 8px; font-family: var(--mono); }
+
+    .input-row-inline { display: flex; align-items: center; gap: 8px; }
+
+    .icon-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: var(--radius-sm); padding: 6px 10px; cursor: pointer; font-size: 12px; flex-shrink: 0; transition: all .15s; line-height: 1; }
+    .icon-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+    .sync-action-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 5px 12px; border-radius: var(--radius-sm); font-family: var(--sans); font-size: 12px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+    .sync-action-btn:hover:not(:disabled) { border-color: var(--green-dim); color: var(--green); background: var(--green-faint); }
+    .sync-action-btn:disabled { opacity: .3; cursor: not-allowed; }
+
+    .card-hint { font-size: 12px; color: var(--muted); line-height: 1.5; margin-top: 8px; }
+    .card-hint code { color: var(--green); font-family: var(--mono); }
+
+    .be-field { margin-bottom: 10px; }
+    .be-field-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 6px; font-weight: 600; display: flex; align-items: center; gap: 6px; font-family: var(--mono); }
+    .be-field-row { display: flex; gap: 8px; align-items: center; }
+    .be-select-wrap { position: relative; flex: 1; min-width: 0; }
+    .be-select-wrap::after { content: '▾'; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; font-size: 12px; }
+    .be-select-wrap .be-select { width: 100%; padding-right: 28px; margin-top: 0; }
+
+    .browse-btn { background: var(--surface2); border: 1px solid var(--border); color: var(--muted); padding: 0 12px; border-radius: var(--radius-sm); cursor: pointer; font-size: 15px; transition: all .15s; flex-shrink: 0; height: 35px; display: inline-flex; align-items: center; justify-content: center; }
+    .browse-btn:hover { border-color: var(--green-dim); color: var(--green); background: var(--green-faint); }
+    .be-upload-status { font-size: 11px; margin-top: 4px; line-height: 1.5; }
+
+    .step-num { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: var(--green-faint); border: 1px solid var(--green-dim); color: var(--green); font-size: 10px; font-weight: 700; flex-shrink: 0; font-family: var(--mono); }
+
+    /* ── Download popover ─────────────────────────────────────────────────── */
+    .dl-popover-wrap { position: relative; }
+    .dl-popover { position: absolute; bottom: calc(100% + 8px); right: 0; width: 260px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; z-index: 50; box-shadow: 0 8px 28px rgba(0,0,0,.7); }
+    .dl-popover-title { font-family: var(--mono); font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: 1.8px; text-transform: uppercase; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; }
+    .dl-popover-title button { background: transparent; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px; }
+    .dl-popover-title button:hover { color: var(--text); }
+    .dl-popover-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+    .dl-popover-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 8px 12px; text-decoration: none; transition: border-color .15s; }
+    .dl-popover-item:hover { border-color: var(--green-dim); }
+    .dl-popover-item span { font-size: 13px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dl-popover-item em { font-style: normal; font-size: 11px; color: var(--green); white-space: nowrap; font-family: var(--mono); }
+    .dl-popover-empty { font-size: 13px; color: var(--muted); text-align: center; padding: 16px 0; }
+
+    /* ── Responsive ───────────────────────────────────────────────────────── */
+    @media (max-width: 1400px) { .app { grid-template-columns: 1fr clamp(280px, 26vw, 380px); } }
+    @media (max-width: 1200px) { .app { grid-template-columns: 1fr clamp(260px, 24vw, 340px); } }
+    @media (max-width: 1000px) { .app { grid-template-columns: 1fr; padding: 14px; } .panel { position: static; max-height: none; } }
+    @media (max-width: 700px)  { .app { padding: 10px; } .input-row { grid-template-columns: 1fr; } }
+    @media (max-width: 480px)  { header { padding: 0 14px; } .header-badge { display: none; } }
+  </style>
+</head>
+<body>
+
+<div class="drop-overlay" id="drop-overlay">Drop files here</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 20 20"><rect x="2" y="3" width="16" height="11" rx="2"/><path d="M7 8h6M7 11h4"/><path d="M10 14v3M7 17h6"/></svg>
+    </div>
+    <div class="logo-text">ppt<span>·key</span></div>
+  </div>
+  <div class="header-badge">PPT + GS · AUTO-POSITION</div>
+</header>
+
+<main class="app">
+  <div class="left">
+
+    <div class="input-row">
+      <!-- Faculty GS Video -->
+      <div class="vic" id="fg-card">
+        <div class="vic-header">
+          <div class="vic-dot dot-fg"></div>
+          <span class="vic-label">FACULTY · GREEN SCREEN</span>
+        </div>
+        <div class="vic-preview">
+          <div class="vic-empty" id="fg-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M10 10l4-2v6l-4-2"/></svg>
+            <span>Green screen video</span>
+          </div>
+          <video id="src-video" playsinline muted style="display:none"></video>
+        </div>
+        <div class="vic-footer">
+          <input type="file" id="fg-input" accept="video/*" style="display:none" />
+          <button class="upload-btn" id="fg-btn" onclick="document.getElementById('fg-input').click()">+ Upload Faculty Video</button>
+        </div>
+      </div>
+
+      <!-- PPT Slides -->
+      <div class="vic" id="bg-card">
+        <div class="vic-header">
+          <div class="vic-dot dot-bg"></div>
+          <span class="vic-label">PPT SLIDES · IMAGES / VIDEO</span>
+        </div>
+        <div class="vic-preview">
+          <div class="vic-empty" id="bg-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M6 8h4M6 11h8M6 14h5"/></svg>
+            <span>Slide images or slideshow MP4</span>
+          </div>
+          <img id="slide-preview-img" style="display:none" alt="slide preview" />
+          <video id="bg-video-preview" style="display:none;max-width:100%;max-height:120px;object-fit:contain" muted playsinline></video>
+        </div>
+        <div class="vic-footer">
+          <input type="file" id="bg-input" accept="image/*,video/*,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" multiple style="display:none" />
+          <button class="upload-btn" id="bg-btn" onclick="document.getElementById('bg-input').click()">+ Upload Slides, PPTX or MP4</button>
+          <p class="hint">Accepts: .pptx &nbsp;|&nbsp; PNG/JPG images &nbsp;|&nbsp; slideshow .mp4</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Output Canvas -->
+    <div class="canvas-zone">
+      <div class="placeholder" id="placeholder">
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.3">
+          <rect x="2" y="8" width="44" height="30" rx="3"/>
+          <rect x="6" y="12" width="36" height="22" rx="2" stroke-dasharray="3 2"/>
+          <path d="M20 22l5-3v8l-5-3"/>
+          <path d="M30 18v12M27 21l3-3 3 3M27 27l3 3 3-3"/>
+        </svg>
+        <p>Upload faculty video + slide images to begin</p>
+        <small>Faculty will auto-position based on slide content</small>
+      </div>
+      <canvas id="output-canvas" style="display:none"></canvas>
+      <div id="status-bar">IDLE</div>
+      <div id="position-badge" style="display:none">–</div>
+      <div id="content-badge" style="display:none">–</div>
+    </div>
+
+    <!-- Slide Thumbnail Strip -->
+    <div class="thumb-strip-wrap" id="thumb-wrap" style="display:none">
+      <div class="thumb-strip-header">
+        <span>SLIDES</span>
+        <span id="slide-counter">0 / 0</span>
+      </div>
+      <div class="thumb-strip" id="thumb-strip"></div>
+    </div>
+
+    <!-- Timing Editor -->
+    <div id="timing-editor-wrap">
+      <div class="timing-editor-header">
+        <span>TIMING EDITOR</span>
+        <button onclick="saveTimingsJson()" title="Download edited timings as JSON">↓ Save timings.json</button>
+      </div>
+      <div id="timing-track"><div id="timing-playhead" style="left:0%"></div></div>
+    </div>
+
+    <!-- Playback / Slide Controls -->
+    <div class="playback-bar">
+      <button class="ctrl-btn slide-nav" id="prev-btn" onclick="prevSlide()" disabled title="Previous slide (←)">◀ Prev</button>
+      <button class="ctrl-btn slide-nav" id="next-btn" onclick="nextSlide()" disabled title="Next slide (→)">Next ▶</button>
+      <button class="ctrl-btn" id="rewind-btn" onclick="rewindVideo()" disabled>⟪</button>
+      <button class="ctrl-btn" id="play-btn" onclick="togglePlay()" disabled>▶ Play</button>
+      <input type="range" id="timeline" min="0" max="100" value="0" step="0.1" oninput="seekVideo(this.value)" disabled />
+      <span class="time-disp" id="time-disp">0.0 / 0.0s</span>
+      <button class="ctrl-btn" id="audio-btn" onclick="toggleAudio()" disabled title="Toggle preview audio">🔇</button>
+      <button class="ctrl-btn rec" id="rec-btn" onclick="toggleRecord()" disabled>⏺ Export</button>
+      <div class="dl-popover-wrap">
+        <button class="ctrl-btn" id="dl-toggle-btn" onclick="toggleDlPopover()" title="Browse & download generated MP4 files">↓ Files</button>
+        <div class="dl-popover" id="dl-popover" style="display:none">
+          <div class="dl-popover-title">
+            <span>Output Files</span>
+            <button onclick="refreshDlPopover()" title="Refresh">⟳</button>
+          </div>
+          <div class="dl-popover-list" id="dl-popover-list">
+            <div class="dl-popover-empty">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side Panel -->
+  <div class="panel">
+
+    <!-- Chroma Key -->
+    <div class="card">
+      <div class="card-title">Chroma Key</div>
+      <div class="card-body">
+        <div class="color-row">
+          <input type="color" id="key-color" value="#74a44b" />
+          <span class="color-label">Key color</span>
+          <button id="eyedrop-btn" onclick="toggleEyedrop()" title="Click then click the canvas to pick key color" class="icon-btn" style="margin-left:auto">⊕ Pick</button>
+        </div>
+        <div class="chips">
+          <span class="chip active" onclick="setKeyColor('#74a44b',this)">Green</span>
+          <span class="chip" onclick="setKeyColor('#0047ab',this)">Blue</span>
+          <span class="chip" onclick="setKeyColor('#cc0000',this)">Red</span>
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Similarity</span><span id="sim-val">60</span></div>
+          <input type="range" min="1" max="120" value="38" step="1" id="sim" oninput="document.getElementById('sim-val').textContent=this.value" />
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Smoothness</span><span id="smooth-val">12</span></div>
+          <input type="range" min="0" max="40" value="12" step="1" id="smooth" oninput="document.getElementById('smooth-val').textContent=this.value" />
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Spill Suppression</span><span id="spill-val">40</span></div>
+          <input type="range" min="0" max="100" value="40" step="1" id="spill" oninput="document.getElementById('spill-val').textContent=this.value" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Auto-Position -->
+    <div class="card">
+      <div class="card-title">Auto-Position</div>
+      <div class="card-body">
+        <div class="toggle-row">
+          <span class="toggle-label">Auto-detect &amp; reposition</span>
+          <label class="toggle">
+            <input type="checkbox" id="auto-toggle" checked onchange="onAutoToggle(this)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="mode-display">
+          <div class="mode-pill" id="pill-center">CENTER</div>
+          <div class="mode-pill" id="pill-right">RIGHT</div>
+          <div class="mode-pill" id="pill-hidden">HIDDEN</div>
+          <div class="mode-pill" id="pill-replace">REPLACE</div>
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Content Sensitivity</span><span id="thresh-val">4</span></div>
+          <input type="range" min="1" max="20" value="4" step="1" id="content-thresh"
+            oninput="document.getElementById('thresh-val').textContent=this.value; reanalyzeCurrent()" />
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Transition Speed</span><span id="lerp-val">6</span></div>
+          <input type="range" min="1" max="20" value="6" step="1" id="lerp-speed"
+            oninput="document.getElementById('lerp-val').textContent=this.value" />
+        </div>
+        <p class="card-hint" style="margin-top:4px;font-size:11px">
+          Blank→center &nbsp;·&nbsp; Left→right &nbsp;·&nbsp; Full→hidden<br/>
+          <span style="color:var(--amber)">●</span> left &nbsp; <span style="color:var(--blue)">●</span> blank &nbsp; <span style="color:#555">●</span> full
+        </p>
+      </div>
+    </div>
+
+    <!-- Faculty Layer -->
+    <div class="card">
+      <div class="card-title">Faculty Layer</div>
+      <div class="card-body">
+        <div class="slider-row">
+          <div class="slider-label"><span>Professor Scale</span><span id="cscale-val">80</span>%</div>
+          <input type="range" min="20" max="120" value="80" step="1" id="center-scale"
+            oninput="document.getElementById('cscale-val').textContent=this.value; recalcTargets()" />
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Opacity</span><span id="opacity-val">100</span>%</div>
+          <input type="range" min="0" max="100" value="100" step="1" id="fg-opacity"
+            oninput="document.getElementById('opacity-val').textContent=this.value" />
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Right-Side Offset</span><span id="margin-val">-5</span>%</div>
+          <input type="range" min="-15" max="15" value="-5" step="1" id="right-margin"
+            oninput="document.getElementById('margin-val').textContent=this.value; recalcTargets()" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Manual Override (only when auto is off) -->
+    <div class="card" id="manual-card" style="display:none">
+      <div class="card-title">Manual Anchor</div>
+      <div class="card-body">
+        <div class="pos-grid">
+          <button class="pos-btn" onclick="manualPos('tl',this)">↖</button>
+          <button class="pos-btn" onclick="manualPos('tc',this)">↑</button>
+          <button class="pos-btn" onclick="manualPos('tr',this)">↗</button>
+          <button class="pos-btn" onclick="manualPos('ml',this)">←</button>
+          <button class="pos-btn active" onclick="manualPos('mc',this)">◉</button>
+          <button class="pos-btn" onclick="manualPos('mr',this)">→</button>
+          <button class="pos-btn" onclick="manualPos('bl',this)">↙</button>
+          <button class="pos-btn" onclick="manualPos('bc',this)">↓</button>
+          <button class="pos-btn" onclick="manualPos('br',this)">↘</button>
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Scale</span><span id="mscale-val">60</span>%</div>
+          <input type="range" min="10" max="150" value="60" step="1" id="manual-scale"
+            oninput="document.getElementById('mscale-val').textContent=this.value; applyManualPos()" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Export -->
+    <div class="card">
+      <div class="card-title">Export</div>
+      <div class="card-body">
+
+        <!-- Primary: direct backend generation -->
+        <button class="action-btn btn-primary" id="gen-btn" onclick="generateMP4()">
+          ↓ Generate &amp; Download MP4
+        </button>
+        <a id="gen-dl-btn" class="be-dl" style="display:none;margin-top:6px"></a>
+        <div id="gen-log" class="be-log-box" style="display:none"><div id="gen-log-lines" class="be-log-lines"></div></div>
+        <p class="card-hint" style="margin-bottom:0;font-size:11px">Uses slider settings &amp; files in <em>Generate MP4</em> below.</p>
+
+        <!-- Recording elements kept in DOM for JS compatibility but hidden -->
+        <a id="dl-link" download="ppt_composite.webm" style="display:none"></a>
+        <button id="export-btn" onclick="toggleRecord()" style="display:none" disabled></button>
+        <div id="conv-status" style="display:none"></div>
+        <a id="conv-dl-btn" style="display:none"></a>
+      </div>
+    </div>
+
+    <!-- Generate MP4 -->
+    <div class="card">
+      <div class="card-title">Generate MP4</div>
+      <div class="card-body">
+
+        <!-- Step 1: Faculty video -->
+        <div class="be-field">
+          <div class="be-field-label"><span class="step-num">1</span> Faculty Video</div>
+          <div class="be-field-row">
+            <div class="be-select-wrap">
+              <select id="be-faculty" class="be-select"><option value="">— select —</option></select>
+            </div>
+            <button class="browse-btn" title="Browse for video file" onclick="browseUpload('be-faculty','video')">📂</button>
+            <input type="file" id="be-faculty-file" accept="video/*,.mp4,.mov,.avi,.mkv,.webm" style="display:none">
+          </div>
+          <div id="be-faculty-upload-status" class="be-upload-status"></div>
+        </div>
+
+        <!-- Step 2: Slides -->
+        <div class="be-field">
+          <div class="be-field-label"><span class="step-num">2</span> Slides / PPTX</div>
+          <div class="be-field-row">
+            <div class="be-select-wrap">
+              <select id="be-slides" class="be-select"><option value="">— select —</option></select>
+            </div>
+            <button class="browse-btn" title="Browse for PPTX or video" onclick="browseUpload('be-slides','slides')">📂</button>
+            <input type="file" id="be-slides-file" accept=".pptx,video/*,.mp4,.mov,.avi,.mkv,.webm" style="display:none">
+          </div>
+          <div id="be-slides-upload-status" class="be-upload-status"></div>
+        </div>
+
+        <!-- Output name -->
+        <div class="be-field">
+          <div class="be-field-label">Output Filename</div>
+          <input type="text" id="be-output" class="be-input" value="output.mp4" style="margin-top:0" />
+        </div>
+
+        <!-- Step 3: Sync (shown conditionally) -->
+        <!-- VSB Speech Sync — shown when slides source is a video -->
+        <div id="vsb-sync-section" class="card-section">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div class="be-field-label" style="margin-bottom:0"><span class="step-num">3</span> Sync Timings</div>
+            <button id="sync-btn" class="sync-action-btn" onclick="runSync()" disabled>⟳ Auto-Sync</button>
+          </div>
+          <div class="input-row-inline">
+            <input type="text" id="be-sync" class="be-input" placeholder="sync_timings.json" style="flex:1;margin-top:0" />
+            <button onclick="document.getElementById('be-sync').value=''" title="Clear" class="icon-btn">✕</button>
+          </div>
+          <div id="sync-log" class="be-log-box" style="display:none"><div id="sync-log-lines" class="be-log-lines"></div></div>
+        </div>
+
+        <!-- PPTX Speech Sync — shown when slides source is a .pptx -->
+        <div id="pptx-sync-section" class="card-section" style="display:none">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+            <div class="be-field-label" style="margin-bottom:0"><span class="step-num">3</span> Sync to Speech</div>
+            <button id="pptx-sync-btn" class="sync-action-btn" onclick="runPptxSync()" disabled>⟳ Sync PPTX</button>
+          </div>
+          <div class="input-row-inline">
+            <input type="text" id="be-timings" class="be-input" placeholder="timings.json" style="flex:1;margin-top:0" />
+            <button onclick="document.getElementById('be-timings').value=''" title="Clear" class="icon-btn">✕</button>
+          </div>
+          <div id="pptx-sync-log" class="be-log-box" style="display:none">
+            <div id="pptx-sync-log-lines" class="be-log-lines"></div>
+          </div>
+        </div>
+
+        <!-- start_slide is always 0 — video starts from slide 1, no trim needed -->
+        <input type="hidden" id="be-start-slide" value="0" />
+
+        <button class="action-btn btn-primary" id="be-run-btn" onclick="runBackend()" style="margin-top:8px" disabled>▶ Run Pipeline</button>
+        <a id="be-dl-btn" class="be-dl" style="display:none">↓ Download</a>
+        <div id="be-log" class="be-log-box" style="display:none"><div id="be-log-lines" class="be-log-lines"></div></div>
+        <p id="be-hint" class="card-hint" style="font-size:11px">Start <code>python server.py</code> to enable.</p>
+      </div>
+    </div>
+
+
+  </div>
+</main>
+
+<footer>
+  <div class="stat"><span style="color:var(--muted)">Frames</span><span id="stat-frames">—</span></div>
+  <div class="stat"><span style="color:var(--muted)">Resolution</span><span id="stat-res">—</span></div>
+  <div class="stat"><span style="color:var(--muted)">Slides</span><span id="stat-slides">—</span></div>
+  <div class="stat"><span style="color:var(--muted)">Status</span><span id="stat-mode">Idle</span></div>
+</footer>
+
+<canvas id="src-canvas" style="display:none"></canvas>
+
+<script>
+// ─── DOM refs ─────────────────────────────────────────────────────────────────
+const srcVideo   = document.getElementById('src-video');
+const srcCanvas  = document.getElementById('src-canvas');
+const srcCtx     = srcCanvas.getContext('2d', {willReadFrequently: true});
+const outCanvas  = document.getElementById('output-canvas');
+const outCtx     = outCanvas.getContext('2d');
+const timeline   = document.getElementById('timeline');
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let hasFg = false, hasSlides = false;
+let isPlaying = false, isRecording = false;
+let mediaRecorder = null, chunks = [];
+let rafId = null, frameCount = 0, fgDuration = 0;
+let autoMode = true, manualAnchor = 'mc';
+
+// Slides
+let slides = [];      // [{img, contentState, personBox, name}]  contentState: 'blank'|'left'|'full'|'person'
+let currentSlideIdx = 0;
+
+// Smooth position + opacity lerp
+let curX = 0, curY = 0, curW = 0, curH = 0;
+let tgtX = 0, tgtY = 0, tgtW = 0, tgtH = 0;
+let curOpacity = 1, tgtOpacity = 1;
+let posReady = false;
+
+// Current position mode: 'center' | 'right' | 'hidden' | 'manual'
+let posMode = 'center';
+
+// Background video mode (when user uploads a slideshow MP4 instead of images)
+let bgVideo = null, useBgVideo = false;
+
+// Chroma key frame cache — skip pixel processing when srcVideo hasn't advanced
+let _lastChromaTime = -1;
+
+// Slide crossfade transition
+let prevSlideImg       = null;   // HTMLImageElement of slide being faded out
+let slideXfadeAlpha    = 1.0;    // 0 = fully prev, 1 = fully current
+const SLIDE_XFADE_SPEED = 1 / 18; // ~18 frames = 0.6s at 30fps
+
+// Timings-driven auto-advance
+let slideTimings   = null;   // [{slide, start, end}, ...] loaded from timings.json
+let lastTimedSlide = -1;     // last slide index set by auto-advance
+
+// Live person detection for video backgrounds
+let livePersonBox = null;
+let personDetectPending = false;
+let lastPersonDetectFrame = -999;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function hexToRgb(h) { return [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)]; }
+
+function setStatus(t, cls='') {
+  const e = document.getElementById('status-bar');
+  e.textContent = t; e.className = cls;
+}
+
+function lerp(a, b, t) { return a + (b - a) * t; }
+
+function setKeyColor(c, el) {
+  document.getElementById('key-color').value = c;
+  document.querySelectorAll('.chips .chip').forEach(x => x.classList.remove('active'));
+  if (el) el.classList.add('active');
+}
+
+// ─── Content Detection ────────────────────────────────────────────────────────
+// Returns 'blank' | 'left' | 'full' | 'photo' based on frame content.
+// 'photo' = photographic/room background, not a slide (low white-pixel fraction).
+function detectSlideContent(img) {
+  const TW = 200, TH = 112;
+  const oc = Object.assign(document.createElement('canvas'), {width: TW, height: TH});
+  const ctx = oc.getContext('2d', {willReadFrequently: true});
+  ctx.drawImage(img, 0, 0, TW, TH);
+
+  const sensitivity = +document.getElementById('content-thresh').value;
+  const threshold = 0.02 + (sensitivity - 1) * (0.08 / 19);
+
+  // Inner 80% crop to ignore slide border decorations
+  const sx = Math.floor(TW * 0.10), sy = Math.floor(TH * 0.10);
+  const sw = Math.floor(TW * 0.80), sh = Math.floor(TH * 0.80);
+  const {data} = ctx.getImageData(sx, sy, sw, sh);
+
+  const step = 2, edgeThresh = 50;
+  const mid = Math.floor(sw / 2);
+
+  // Count white pixels (used for photo-background check below)
+  let whiteCount = 0, totalCount = 0;
+  for (let y = 0; y < sh; y += step) {
+    for (let x = 0; x < sw; x += step) {
+      const i = (y * sw + x) * 4;
+      if (data[i] > 200 && data[i+1] > 200 && data[i+2] > 200) whiteCount++;
+      totalCount++;
+    }
+  }
+  const whiteFraction = totalCount > 0 ? whiteCount / totalCount : 0;
+
+  function halfDensity(fromX, toX) {
+    let edges = 0, total = 0;
+    for (let y = step; y < sh - step; y += step) {
+      for (let x = fromX + step; x < toX - step; x += step) {
+        const i = (y * sw + x) * 4;
+        const iR = i + 4, iB = ((y + step) * sw + x) * 4;
+        const v  = data[i]   * 0.299 + data[i+1]   * 0.587 + data[i+2]   * 0.114;
+        const vR = data[iR]  * 0.299 + data[iR+1]  * 0.587 + data[iR+2]  * 0.114;
+        const vB = data[iB]  * 0.299 + data[iB+1]  * 0.587 + data[iB+2]  * 0.114;
+        if (Math.abs(v - vR) > edgeThresh || Math.abs(v - vB) > edgeThresh) edges++;
+        total++;
+      }
+    }
+    return total > 0 ? edges / total : 0;
+  }
+
+  const leftDensity  = halfDensity(0, mid);
+  const rightDensity = halfDensity(mid, sw);
+
+  // Photo-background check: edge-sparse AND symmetric (no text/diagram asymmetry).
+  // Threshold 0.55 instead of 0.08 so bright corridors (white ceiling tiles, walls)
+  // are also caught — pure presentation slides have whiteFraction > 0.55 and would
+  // still fall through to blank/left/full below.
+  const avgDensity  = (leftDensity + rightDensity) / 2;
+  const asymmetry   = Math.abs(leftDensity - rightDensity);
+  if (whiteFraction < 0.55 && avgDensity < 0.04 && asymmetry < 0.02) return 'photo';
+
+  const hasLeft  = leftDensity  > threshold;
+  const hasRight = rightDensity > threshold;
+
+  if (!hasLeft && !hasRight) return 'blank';
+  if (hasLeft && !hasRight)  return 'left';
+  return 'full';
+}
+
+// Maps a content state to a position mode
+function contentStateToMode(state) {
+  if (state === 'blank')  return 'center';
+  if (state === 'left')   return 'right';
+  if (state === 'person') return 'replace';
+  if (state === 'photo')  return 'center';   // tentative until async person detection resolves
+  return 'hidden';
+}
+
+// Async person detection for video-background frames.
+// Called when a 'photo' state is detected every ~30 rendered frames.
+// Sends a small JPEG to the server, receives a person bounding box.
+async function detectPersonInBgFrame() {
+  if (personDetectPending || !bgVideo) return;
+  personDetectPending = true;
+  lastPersonDetectFrame = frameCount;
+
+  const W = 320, H = 180;
+  const tc = Object.assign(document.createElement('canvas'), {width: W, height: H});
+  tc.getContext('2d').drawImage(bgVideo, 0, 0, W, H);
+  const b64 = tc.toDataURL('image/jpeg', 0.7);
+
+  try {
+    const res  = await fetch('/api/detect_person_frame', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({image: b64})
+    });
+    const result = await res.json();
+    livePersonBox = result.personBox || null;
+    if (autoMode && useBgVideo) {
+      const newMode = livePersonBox ? 'replace' : 'center';
+      if (posMode !== newMode) setPositionMode(newMode, true);
+    }
+  } catch(e) {
+    livePersonBox = null;
+  } finally {
+    personDetectPending = false;
+  }
+}
+
+// ─── Slides Management ────────────────────────────────────────────────────────
+function loadSlides(files) {
+  slides = [];
+  const arr = Array.from(files);
+  let loaded = 0;
+
+  arr.forEach(file => {
+    const img = new Image();
+    img.onload = () => {
+      const contentState = detectSlideContent(img);
+      slides.push({img, contentState, name: file.name, url: img.src});
+      loaded++;
+      if (loaded === arr.length) finalizeSlides();
+    };
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function finalizeSlides() {
+  // Natural sort so Slide1, Slide2 ... Slide10 orders correctly
+  slides.sort((a, b) => a.name.localeCompare(b.name, undefined, {numeric: true, sensitivity: 'base'}));
+
+  hasSlides = true;
+  currentSlideIdx = 0;
+  renderThumbnails();
+  gotoSlide(0, false);
+
+  document.getElementById('thumb-wrap').style.display = '';
+  document.getElementById('bg-card').classList.add('active-border');
+  document.getElementById('slide-preview-img').style.display = 'block';
+  document.getElementById('bg-empty').style.display = 'none';
+
+  const btn = document.getElementById('bg-btn');
+  btn.classList.add('has-file');
+  btn.textContent = `✓ ${slides.length} slides loaded`;
+
+  document.getElementById('stat-slides').textContent = slides.length;
+  document.getElementById('prev-btn').disabled = false;
+  document.getElementById('next-btn').disabled = false;
+
+  updateReady();
+  if (hasFg) processFrame();
+}
+
+function setupBgVideo(file) {
+  const vid = document.createElement('video');
+  vid.src = URL.createObjectURL(file);
+  vid.muted = true;
+  vid.playsInline = true;
+  vid.load();
+  vid.onloadedmetadata = () => {
+    bgVideo    = vid;
+    useBgVideo = true;
+    hasSlides  = true;
+
+    // Show video thumbnail preview in input card
+    const preview = document.getElementById('bg-video-preview');
+    preview.src = vid.src;
+    preview.style.display = 'block';
+    document.getElementById('bg-empty').style.display = 'none';
+    document.getElementById('slide-preview-img').style.display = 'none';
+    document.getElementById('thumb-wrap').style.display = 'none';
+
+    const btn = document.getElementById('bg-btn');
+    btn.classList.add('has-file');
+    btn.textContent = '✓ ' + file.name.substring(0, 26);
+    document.getElementById('bg-card').classList.add('active-border');
+    document.getElementById('stat-slides').textContent = 'MP4 bg';
+
+    // Initial content detection on first frame
+    vid.onseeked = () => {
+      if (autoMode) {
+        const state = detectSlideContent(vid);
+        setPositionMode(contentStateToMode(state), false);
+        updateContentBadge(state);
+      }
+      vid.onseeked = null;
+    };
+    vid.currentTime = 0.01;
+
+    updateReady();
+    if (hasFg) processFrame();
+  };
+}
+
+function renderThumbnails() {
+  const strip = document.getElementById('thumb-strip');
+  strip.innerHTML = '';
+  slides.forEach((s, i) => {
+    const div = document.createElement('div');
+    div.className = 'thumb' + (i === currentSlideIdx ? ' active' : '');
+    div.onclick = () => gotoSlide(i);
+    div.id = `thumb-${i}`;
+
+    const img = document.createElement('img');
+    img.src = s.url;
+    img.alt = s.name;
+
+    const badge = document.createElement('div');
+    const badgeClass = s.contentState === 'left' ? 'content'
+                     : s.contentState === 'full'   ? 'full'
+                     : s.contentState === 'person' ? 'person'
+                     : 'blank';
+    badge.className = 'thumb-badge ' + badgeClass;
+
+    const label = document.createElement('div');
+    label.className = 'thumb-label';
+    label.textContent = i === currentSlideIdx ? `▶ ${i + 1}` : `${i + 1}`;
+
+    const del = document.createElement('button');
+    del.className = 'thumb-del';
+    del.textContent = '×';
+    del.title = 'Remove slide';
+    del.onclick = e => { e.stopPropagation(); removeSlide(i); };
+
+    div.append(img, badge, label, del);
+    strip.appendChild(div);
+  });
+}
+
+function removeSlide(i) {
+  if (slides.length <= 1) return;
+  const removedNum = i + 1;
+  slides.splice(i, 1);
+
+  // Adjust timings: drop removed entry, decrement indices above it
+  if (slideTimings) {
+    slideTimings = slideTimings
+      .filter(e => e.slide !== i)
+      .map(e => ({ ...e, slide: e.slide > i ? e.slide - 1 : e.slide }));
+  }
+
+  // Clamp current index to valid range
+  if (currentSlideIdx >= slides.length) currentSlideIdx = slides.length - 1;
+
+  // Rebuild strip from scratch
+  renderThumbnails();
+
+  // Update slide counter
+  document.getElementById('slide-counter').textContent =
+    `${currentSlideIdx + 1} / ${slides.length}`;
+
+  // Scroll the active thumbnail into view
+  const activeThumb = document.getElementById(`thumb-${currentSlideIdx}`);
+  if (activeThumb) activeThumb.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'center'});
+
+  // Re-render canvas and update badges
+  const s = slides[currentSlideIdx];
+  if (s) {
+    document.getElementById('slide-preview-img').src = s.url;
+    updateContentBadge(s.contentState);
+    if (autoMode) setPositionMode(contentStateToMode(s.contentState), false);
+  }
+  if (!isPlaying) processFrame();
+
+  setStatus(`Slide ${removedNum} removed  (${slides.length} slides remaining)`, 'active');
+}
+
+function gotoSlide(idx) {
+  if (idx < 0 || idx >= slides.length) return;
+  if (idx === currentSlideIdx) return;
+
+  // Save the outgoing slide for the canvas crossfade
+  if (slides[currentSlideIdx]) {
+    prevSlideImg    = slides[currentSlideIdx].img;
+    slideXfadeAlpha = 0.0;
+  }
+
+  // Deactivate old thumb
+  const oldThumb = document.getElementById(`thumb-${currentSlideIdx}`);
+  if (oldThumb) {
+    oldThumb.classList.remove('active');
+    const oldLabel = oldThumb.querySelector('.thumb-label');
+    if (oldLabel) oldLabel.textContent = `${currentSlideIdx + 1}`;
+  }
+
+  currentSlideIdx = idx;
+  const s = slides[idx];
+
+  // Update preview in input card
+  document.getElementById('slide-preview-img').src = s.url;
+
+  // Update counter
+  document.getElementById('slide-counter').textContent = `${idx + 1} / ${slides.length}`;
+
+  // Activate new thumb + scroll into view
+  const newThumb = document.getElementById(`thumb-${idx}`);
+  if (newThumb) {
+    newThumb.classList.add('active');
+    const newLabel = newThumb.querySelector('.thumb-label');
+    if (newLabel) newLabel.textContent = `▶ ${idx + 1}`;
+    newThumb.scrollIntoView({behavior: 'smooth', block: 'nearest', inline: 'center'});
+  }
+
+  if (autoMode) {
+    setPositionMode(contentStateToMode(s.contentState), true);
+  }
+
+  updateContentBadge(s.contentState);
+  updateTimingActiveSegment();
+
+  if (!isPlaying) processFrame();
+}
+
+function prevSlide() { gotoSlide(currentSlideIdx - 1); }
+function nextSlide() { gotoSlide(currentSlideIdx + 1); }
+
+// ─── Timing Editor ────────────────────────────────────────────────────────────
+const SEG_COLORS = [
+  '#1a3a28','#1a2a3a','#2e1a3a','#3a2a14','#0f3030',
+  '#3a1a1a','#1f2e3a','#2a3a14','#3a1a2e','#14263a',
+];
+
+function renderTimingTrack() {
+  const wrap  = document.getElementById('timing-editor-wrap');
+  const track = document.getElementById('timing-track');
+  if (!wrap || !track) return;
+
+  if (!slideTimings || slideTimings.length === 0 || fgDuration <= 0) {
+    wrap.style.display = 'none';
+    return;
+  }
+  wrap.style.display = '';
+
+  // Remove old segments (keep the playhead)
+  track.querySelectorAll('.timing-seg').forEach(el => el.remove());
+
+  slideTimings.forEach((entry, i) => {
+    const left  = (entry.start / fgDuration) * 100;
+    const width = ((entry.end - entry.start) / fgDuration) * 100;
+    if (width <= 0) return;
+
+    const seg = document.createElement('div');
+    seg.className = 'timing-seg' + (entry.slide === currentSlideIdx ? ' t-active' : '');
+    seg.style.left  = left + '%';
+    seg.style.width = width + '%';
+    seg.style.background = SEG_COLORS[entry.slide % SEG_COLORS.length];
+    seg.dataset.idx = i;
+    seg.addEventListener('click', () => {
+      const t = entry.start;
+      if (srcVideo) { srcVideo.currentTime = t; }
+      gotoSlide(entry.slide);
+    });
+
+    const numEl = document.createElement('div');
+    numEl.className = 'timing-seg-num';
+    numEl.textContent = entry.slide + 1;
+
+    const durEl = document.createElement('div');
+    durEl.className = 'timing-seg-dur';
+    const secs = Math.round(entry.end - entry.start);
+    durEl.textContent = secs + 's';
+
+    seg.append(numEl, durEl);
+
+    // Drag handle on the right edge (not for the last segment)
+    if (i < slideTimings.length - 1) {
+      const handle = document.createElement('div');
+      handle.className = 'timing-handle';
+      handle.addEventListener('mousedown', ev => {
+        ev.stopPropagation();
+        ev.preventDefault();
+        handle.classList.add('dragging');
+        const rect = track.getBoundingClientRect();
+
+        const onMove = mv => {
+          const ratio = Math.max(0, Math.min(1, (mv.clientX - rect.left) / rect.width));
+          const newT  = ratio * fgDuration;
+          const lo    = slideTimings[i].start + 0.5;
+          const hi    = slideTimings[i + 1].end - 0.5;
+          const t     = Math.max(lo, Math.min(hi, newT));
+          slideTimings[i].end     = Math.round(t * 10) / 10;
+          slideTimings[i + 1].start = Math.round(t * 10) / 10;
+          renderTimingTrack();
+        };
+        const onUp = () => {
+          handle.classList.remove('dragging');
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+      });
+      seg.appendChild(handle);
+    }
+
+    track.appendChild(seg);
+  });
+}
+
+function updateTimingPlayhead() {
+  if (!fgDuration || fgDuration <= 0) return;
+  const ph = document.getElementById('timing-playhead');
+  if (!ph || !srcVideo) return;
+  const pct = (srcVideo.currentTime / fgDuration) * 100;
+  ph.style.left = pct + '%';
+}
+
+async function saveTimingsJson() {
+  if (!slideTimings) return;
+
+  // Determine filename: use whatever is currently in the Timings field, or default
+  const timingsField = document.getElementById('be-timings');
+  const filename = (timingsField?.value.trim() || 'timings.json');
+
+  try {
+    const res = await fetch('/api/save_timings', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({filename, timings: slideTimings}),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Save failed');
+    // Make sure the Timings field points to the saved file
+    if (timingsField) timingsField.value = data.saved;
+    setStatus(`Timings saved to ${data.saved} — backend pipeline will use the edited version`, 'active');
+  } catch(e) {
+    // Fallback: browser download
+    const blob = new Blob([JSON.stringify(slideTimings, null, 2)], {type: 'application/json'});
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = filename; a.click();
+    URL.revokeObjectURL(url);
+    setStatus('Server save failed — file downloaded instead. Reload it in the Timings field.', '');
+  }
+}
+
+function updateTimingActiveSegment() {
+  if (!slideTimings) return;
+  document.querySelectorAll('.timing-seg').forEach(el => {
+    const i = parseInt(el.dataset.idx, 10);
+    if (!isNaN(i)) {
+      el.classList.toggle('t-active', slideTimings[i]?.slide === currentSlideIdx);
+    }
+  });
+}
+
+function reanalyzeCurrent() {
+  if (!hasSlides) return;
+  // Keep server-detected person boxes; only re-run edge detection on non-person slides
+  slides.forEach(s => {
+    if (!s.personBox) s.contentState = detectSlideContent(s.img);
+  });
+  renderThumbnails();
+  if (autoMode) {
+    setPositionMode(contentStateToMode(slides[currentSlideIdx].contentState), false);
+  }
+  updateContentBadge(slides[currentSlideIdx].contentState);
+}
+
+// ─── Position System ─────────────────────────────────────────────────────────
+function setPositionMode(mode, smooth = true) {
+  posMode = mode;
+  recalcTargets(smooth);
+  updatePositionBadge();
+}
+
+function recalcTargets(smooth = true) {
+  if (!hasFg || !srcVideo.videoWidth) return;
+  const OW = outCanvas.width, OH = outCanvas.height;
+  const vw = srcVideo.videoWidth, vh = srcVideo.videoHeight;
+  const aspect = vw / vh;
+
+  if (posMode === 'hidden') {
+    tgtOpacity = 0;
+    if (!smooth || !posReady) { curOpacity = 0; posReady = true; }
+    return;
+  }
+
+  tgtOpacity = 1;
+  let w, h, x, y;
+
+  if (posMode === 'center') {
+    const scale = +document.getElementById('center-scale').value / 100;
+    h = OH * scale;
+    w = h * aspect;
+    x = (OW - w) / 2;
+    y = (OH - h) / 2;
+  } else if (posMode === 'right') {
+    const scale = +document.getElementById('center-scale').value / 100;  // same size as center
+    const margin = +document.getElementById('right-margin').value / 100;
+    h = OH * scale;
+    w = h * aspect;
+    x = OW - w - OW * margin;
+    y = (OH - h) / 2;  // vertically centered, same as center mode
+  } else if (posMode === 'replace') {
+    const pb = useBgVideo ? livePersonBox : slides[currentSlideIdx]?.personBox;
+    if (pb) {
+      const pbH = pb.h * OH, pbW = pb.w * OW, pbX = pb.x * OW, pbY = pb.y * OH;
+      h = pbH;
+      w = h * aspect;
+      x = pbX + (pbW - w) / 2;  // centre speaker within detected box
+      y = pbY;
+    } else {
+      // Fallback: treat as center if box data missing
+      const scale = +document.getElementById('center-scale').value / 100;
+      h = OH * scale; w = h * aspect;
+      x = (OW - w) / 2; y = (OH - h) / 2;
+    }
+  } else {
+    // manual
+    applyManualPos();
+    return;
+  }
+
+  tgtX = x; tgtY = y; tgtW = w; tgtH = h;
+
+  if (!smooth || !posReady) {
+    curX = tgtX; curY = tgtY; curW = tgtW; curH = tgtH; curOpacity = 1;
+    posReady = true;
+  }
+}
+
+function applyManualPos() {
+  if (!hasFg || !srcVideo.videoWidth) return;
+  const OW = outCanvas.width, OH = outCanvas.height;
+  const vw = srcVideo.videoWidth, vh = srcVideo.videoHeight;
+  const aspect = vw / vh;
+  const scale = +document.getElementById('manual-scale').value / 100;
+  const h = OH * scale, w = h * aspect;
+
+  let x = 0, y = 0;
+  const a = manualAnchor;
+  if (a[1] === 'c') x = (OW - w) / 2;
+  else if (a[1] === 'r') x = OW - w;
+  if (a[0] === 'm') y = (OH - h) / 2;
+  else if (a[0] === 'b') y = OH - h;
+
+  tgtX = x; tgtY = y; tgtW = w; tgtH = h;
+  if (!posReady) { curX = tgtX; curY = tgtY; curW = tgtW; curH = tgtH; posReady = true; }
+}
+
+function onAutoToggle(el) {
+  autoMode = el.checked;
+  const manualCard = document.getElementById('manual-card');
+  manualCard.style.display = autoMode ? 'none' : '';
+  if (autoMode) {
+    if (hasSlides) {
+      setPositionMode(contentStateToMode(slides[currentSlideIdx].contentState), false);
+    }
+  } else {
+    posMode = 'manual';
+    applyManualPos();
+    updatePositionBadge();
+  }
+}
+
+function manualPos(anchor, el) {
+  manualAnchor = anchor;
+  document.querySelectorAll('.pos-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  applyManualPos();
+}
+
+// ─── Badge Updates ────────────────────────────────────────────────────────────
+function updatePositionBadge() {
+  const badge = document.getElementById('position-badge');
+  const p1 = document.getElementById('pill-center');
+  const p2 = document.getElementById('pill-right');
+  const p3 = document.getElementById('pill-hidden');
+  const p4 = document.getElementById('pill-replace');
+  badge.style.display = '';
+  p1.className = 'mode-pill'; p2.className = 'mode-pill';
+  p3.className = 'mode-pill'; p4.className = 'mode-pill';
+
+  if (posMode === 'center') {
+    badge.textContent = 'AUTO · CENTERED';
+    badge.className = 'centered';
+    p1.classList.add('active-center');
+  } else if (posMode === 'right') {
+    badge.textContent = 'AUTO · RIGHT SIDE';
+    badge.className = 'right';
+    p2.classList.add('active-right');
+  } else if (posMode === 'hidden') {
+    badge.textContent = 'AUTO · HIDDEN';
+    badge.className = 'hidden';
+    p3.classList.add('active-hidden');
+  } else if (posMode === 'replace') {
+    badge.textContent = 'AUTO · REPLACE';
+    badge.className = 'replace';
+    p4.classList.add('active-replace');
+  } else {
+    badge.textContent = 'MANUAL';
+    badge.className = 'manual';
+  }
+}
+
+function updateContentBadge(contentState) {
+  const b = document.getElementById('content-badge');
+  b.style.display = '';
+  if (contentState === 'left') {
+    b.textContent = '● CONTENT LEFT → RIGHT SIDE';
+    b.className = 'left';
+  } else if (contentState === 'full') {
+    b.textContent = '● FULL SCREEN → HIDDEN';
+    b.className = 'full';
+  } else if (contentState === 'person') {
+    b.textContent = '● PERSON DETECTED → REPLACE';
+    b.className = 'person';
+  } else if (contentState === 'photo') {
+    b.textContent = '● PHOTO BG → DETECTING…';
+    b.className = 'none';
+  } else {
+    b.textContent = '● NO CONTENT → CENTERED';
+    b.className = 'none';
+  }
+}
+
+// ─── Chroma Key + Render ──────────────────────────────────────────────────────
+function processFrame() {
+  if (!hasFg) return;
+
+  const W = srcCanvas.width, H = srcCanvas.height;
+  const OW = outCanvas.width, OH = outCanvas.height;
+
+  // ── Auto-advance slides from timings during playback ─────────────────────
+  // Only runs in AUTO mode — in MANUAL mode the user controls slide selection directly.
+  if (slideTimings && autoMode && !useBgVideo && hasSlides && isPlaying) {
+    const t = srcVideo.currentTime;
+    let targetIdx = 0;
+    for (let i = slideTimings.length - 1; i >= 0; i--) {
+      if (t >= slideTimings[i].start) { targetIdx = slideTimings[i].slide; break; }
+    }
+    targetIdx = Math.min(targetIdx, slides.length - 1);
+    if (targetIdx !== currentSlideIdx) gotoSlide(targetIdx);
+  }
+
+  // ── Draw background — bg video or slide image with crossfade ─────────────
+  if (useBgVideo && bgVideo && bgVideo.readyState >= 2) {
+    outCtx.drawImage(bgVideo, 0, 0, OW, OH);
+    // Re-detect content every 15 frames so position transitions are smooth
+    if (autoMode && frameCount % 15 === 0) {
+      const state = detectSlideContent(bgVideo);
+      const mode  = contentStateToMode(state);
+      if (mode !== posMode) setPositionMode(mode, true);
+      updateContentBadge(state);
+      if (state === 'photo') {
+        if (frameCount - lastPersonDetectFrame > 30) detectPersonInBgFrame();
+      } else {
+        livePersonBox = null;
+      }
+    }
+  } else if (hasSlides && slides[currentSlideIdx]) {
+    if (prevSlideImg && slideXfadeAlpha < 1.0) {
+      // Crossfade: draw outgoing slide then composite incoming slide on top
+      outCtx.drawImage(prevSlideImg, 0, 0, OW, OH);
+      outCtx.globalAlpha = slideXfadeAlpha;
+      outCtx.drawImage(slides[currentSlideIdx].img, 0, 0, OW, OH);
+      outCtx.globalAlpha = 1.0;
+      slideXfadeAlpha = Math.min(1.0, slideXfadeAlpha + SLIDE_XFADE_SPEED);
+      if (slideXfadeAlpha >= 1.0) prevSlideImg = null;
+    } else {
+      outCtx.drawImage(slides[currentSlideIdx].img, 0, 0, OW, OH);
+    }
+  } else {
+    outCtx.fillStyle = '#111';
+    outCtx.fillRect(0, 0, OW, OH);
+  }
+
+  // Draw FG video to source canvas and apply chroma key.
+  // Only re-process when the video has actually advanced to a new frame — this
+  // halves the CPU cost at 30fps/60Hz and prevents drawing partially-decoded frames.
+  const _vt = srcVideo.currentTime;
+  if (_vt !== _lastChromaTime && srcVideo.readyState >= 2) {
+    _lastChromaTime = _vt;
+    srcCtx.drawImage(srcVideo, 0, 0, W, H);
+    const imgData = srcCtx.getImageData(0, 0, W, H);
+    const d = imgData.data;
+    const sim = +document.getElementById('sim').value;
+    const smooth = +document.getElementById('smooth').value;
+    const spillAmt = +document.getElementById('spill').value / 100;
+    const [kr, kg, kb] = hexToRgb(document.getElementById('key-color').value);
+
+    // Extended soft zone: key-hue pixels just outside smooth threshold
+    // (catches floor shadows / dark green-screen corners)
+    const simSoft  = sim * 1.8;
+    const extRange = Math.max(simSoft - sim - smooth, 1);
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i+1], b = d[i+2];
+      const dist = Math.sqrt((r-kr)**2 + (g-kg)**2 + (b-kb)**2);
+      let alpha = dist < sim ? 0 : dist < sim + smooth ? (dist - sim) / smooth : 1;
+      if (alpha === 1 && dist < simSoft) {
+        const isKeyHue = kg >= kr && kg >= kb ? (g >= r && g >= b) :
+                         kb >= kr && kb >= kg ? (b >= r && b >= g) : (r >= g && r >= b);
+        if (isKeyHue) alpha = (dist - (sim + smooth)) / extRange;
+      }
+      if (alpha < 1 && spillAmt > 0) {
+        const sf = (1 - alpha) * spillAmt;
+        if (kg >= kr && kg >= kb)      d[i+1] = Math.max(0, g - (g - Math.max(r,b)) * sf);
+        else if (kb >= kr && kb >= kg) d[i+2] = Math.max(0, b - (b - Math.max(r,g)) * sf);
+        else                           d[i]   = Math.max(0, r - (r - Math.max(g,b)) * sf);
+      }
+      d[i+3] = Math.round(alpha * 255);
+    }
+    srcCtx.putImageData(imgData, 0, 0);
+  }
+
+  // Lerp toward target position and opacity
+  const speed = +document.getElementById('lerp-speed').value / 100;
+  curX = lerp(curX, tgtX, speed);
+  curY = lerp(curY, tgtY, speed);
+  curW = lerp(curW, tgtW, speed);
+  curH = lerp(curH, tgtH, speed);
+  curOpacity = lerp(curOpacity, tgtOpacity, speed);
+
+  // Draw composited faculty (skip if fully transparent)
+  if (curOpacity > 0.01) {
+    const manualOpacity = +document.getElementById('fg-opacity').value / 100;
+
+    // 'replace' mode: dim the background person region so they fade behind the speaker
+    if (posMode === 'replace') {
+      const pb = useBgVideo ? livePersonBox : slides[currentSlideIdx]?.personBox;
+      if (pb) {
+        const px = pb.x * OW, py = pb.y * OH, pw = pb.w * OW, ph = pb.h * OH;
+        outCtx.fillStyle = 'rgba(0,0,0,0.65)';
+        outCtx.fillRect(px, py, pw, ph);
+      }
+    }
+
+    outCtx.globalAlpha = manualOpacity * curOpacity;
+    outCtx.drawImage(srcCanvas, curX, curY, curW, curH);
+    outCtx.globalAlpha = 1;
+  }
+
+  frameCount++;
+  document.getElementById('stat-frames').textContent = frameCount;
+
+  if (!isRecording && fgDuration > 0) {
+    const t = srcVideo.currentTime;
+    timeline.value = (t / fgDuration) * 100;
+    document.getElementById('time-disp').textContent = t.toFixed(1) + ' / ' + fgDuration.toFixed(1) + 's';
+    updateTimingPlayhead();
+  }
+}
+
+function renderLoop() {
+  if (!srcVideo.paused && !srcVideo.ended) processFrame();
+  rafId = requestAnimationFrame(renderLoop);
+}
+
+// ─── FG Video Setup ───────────────────────────────────────────────────────────
+function setupFg(file) {
+  srcVideo.src = URL.createObjectURL(file);
+  srcVideo.load();
+  srcVideo.onloadedmetadata = () => {
+    const W = srcVideo.videoWidth, H = srcVideo.videoHeight;
+    srcCanvas.width = W; srcCanvas.height = H;
+    outCanvas.width = W; outCanvas.height = H;
+    fgDuration = srcVideo.duration;
+
+    document.getElementById('placeholder').style.display = 'none';
+    outCanvas.style.display = 'block';
+    document.getElementById('stat-res').textContent = W + '×' + H;
+    document.getElementById('stat-dur') && (document.getElementById('stat-dur').textContent = isFinite(fgDuration) ? fgDuration.toFixed(1) + 's' : '—');
+    timeline.disabled = false;
+    hasFg = true;
+
+    const btn = document.getElementById('fg-btn');
+    btn.classList.add('has-file');
+    btn.textContent = '✓ ' + file.name.substring(0, 26);
+    srcVideo.style.display = 'block';
+    document.getElementById('fg-empty').style.display = 'none';
+    document.getElementById('fg-card').classList.add('active-border');
+
+    // Initialize position
+    posMode = 'center';
+    posReady = false;
+    recalcTargets(false);
+    updatePositionBadge();
+
+    updateReady();
+    if (hasSlides) {
+      setPositionMode(contentStateToMode(slides[currentSlideIdx]?.contentState ?? 'blank'), false);
+    }
+    renderTimingTrack();
+    processFrame();
+  };
+}
+
+function updateReady() {
+  const ok = hasFg;
+  ['play-btn', 'rewind-btn', 'rec-btn', 'export-btn', 'audio-btn'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !ok;
+  });
+  if (ok) { setStatus('READY', 'active'); document.getElementById('stat-mode').textContent = 'Ready'; }
+}
+
+// ─── Playback ─────────────────────────────────────────────────────────────────
+function togglePlay() {
+  if (!hasFg) return;
+  if (isPlaying) {
+    srcVideo.pause();
+    if (bgVideo) bgVideo.pause();
+    isPlaying = false;
+    document.getElementById('play-btn').textContent = '▶ Play';
+    setStatus('PAUSED', ''); document.getElementById('stat-mode').textContent = 'Paused';
+  } else {
+    srcVideo.play();
+    if (bgVideo) bgVideo.play();
+    isPlaying = true;
+    document.getElementById('play-btn').textContent = '⏸ Pause';
+    setStatus('PLAYING', 'active'); document.getElementById('stat-mode').textContent = 'Playing';
+    if (!rafId) rafId = requestAnimationFrame(renderLoop);
+  }
+}
+
+function rewindVideo() {
+  _lastChromaTime = -1;
+  srcVideo.currentTime = 0;
+  if (bgVideo) bgVideo.currentTime = 0;
+  timeline.value = 0;
+  lastTimedSlide = -1;
+  document.getElementById('time-disp').textContent = '0.0 / ' + fgDuration.toFixed(1) + 's';
+  processFrame();
+}
+
+function seekVideo(pct) {
+  if (!hasFg) return;
+  const t = (pct / 100) * fgDuration;
+  _lastChromaTime = -1;
+  srcVideo.currentTime = t;
+  if (bgVideo) bgVideo.currentTime = t;
+  document.getElementById('time-disp').textContent = t.toFixed(1) + ' / ' + fgDuration.toFixed(1) + 's';
+  processFrame();
+}
+
+srcVideo.addEventListener('seeked', () => {
+  _lastChromaTime = -1;
+  if (!isPlaying) processFrame();
+});
+
+srcVideo.onended = () => {
+  if (isRecording) stopRecord();
+  isPlaying = false;
+  document.getElementById('play-btn').textContent = '▶ Play';
+  setStatus('DONE', 'active'); document.getElementById('stat-mode').textContent = 'Done';
+};
+
+// ─── Recording ────────────────────────────────────────────────────────────────
+function toggleAudio() {
+  srcVideo.muted = !srcVideo.muted;
+  document.getElementById('audio-btn').textContent = srcVideo.muted ? '🔇' : '🔊';
+}
+
+function toggleRecord() { isRecording ? stopRecord() : startRecord(); }
+
+function startRecord() {
+  if (!hasFg) return;
+  chunks = [];
+  const stream = outCanvas.captureStream(30);
+
+  // Capture faculty audio — unmute temporarily to access the stream
+  const wasMuted = srcVideo.muted;
+  try {
+    srcVideo.muted = false;
+    const audioTracks = srcVideo.captureStream().getAudioTracks();
+    audioTracks.forEach(t => stream.addTrack(t));
+  } catch(e) { /* captureStream not available in this browser — video only */ }
+
+  // Prefer VP8 over VP9: VP8 has lower memory overhead for long recordings
+  // and is less likely to cause mid-recording drops on a ~17-min stream.
+  const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus'
+             : MediaRecorder.isTypeSupported('video/webm;codecs=vp9')      ? 'video/webm;codecs=vp9'
+             : 'video/webm';
+  mediaRecorder = new MediaRecorder(stream, {mimeType: mime, videoBitsPerSecond: 3_000_000});
+  mediaRecorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  mediaRecorder.onstop = async () => {
+    srcVideo.muted = wasMuted;
+    document.getElementById('audio-btn').textContent = wasMuted ? '🔇' : '🔊';
+    const blob = new Blob(chunks, {type: 'video/webm'});
+
+    const convStatus = document.getElementById('conv-status');
+    const convDlBtn  = document.getElementById('conv-dl-btn');
+    convDlBtn.style.display = 'none';
+    convStatus.style.display = '';
+    convStatus.textContent = 'Uploading…';
+    document.getElementById('rec-btn').textContent = '⏺ Export';
+    document.getElementById('export-btn').textContent = '⏺ Record & Export MP4';
+    isRecording = false;
+
+    try {
+      const form = new FormData();
+      form.append('file', blob, 'recorded_output.webm');
+      const res = await fetch('/api/convert', { method: 'POST', body: form });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop();
+        for (const ln of lines) {
+          if (!ln.startsWith('data: ')) continue;
+          let msg; try { msg = JSON.parse(ln.slice(6)); } catch { continue; }
+          if (msg.type === 'log') {
+            convStatus.textContent = msg.line;
+          } else if (msg.type === 'done') {
+            convStatus.textContent = 'Conversion complete ✓';
+            convDlBtn.href = `/api/download/${encodeURIComponent(msg.output)}`;
+            convDlBtn.textContent = `↓ Download ${msg.output}`;
+            convDlBtn.style.display = 'block';
+            setStatus('EXPORTED ✓', 'active');
+            document.getElementById('stat-mode').textContent = 'Exported';
+          } else if (msg.type === 'error') {
+            convStatus.style.color = 'var(--danger)';
+            convStatus.textContent = 'ffmpeg conversion failed — downloading WebM as fallback';
+            console.error('[convert] server error event:', msg);
+            const a = document.getElementById('dl-link');
+            a.href = URL.createObjectURL(blob);
+            a.click();
+            setStatus('EXPORTED ✓', 'active');
+          }
+        }
+      }
+    } catch(e) {
+      convStatus.style.color = 'var(--danger)';
+      convStatus.textContent = `Upload/convert failed: ${e.message} — downloading WebM as fallback`;
+      console.error('[convert] fetch error:', e);
+      const a = document.getElementById('dl-link');
+      a.href = URL.createObjectURL(blob);
+      a.click();
+      setStatus('EXPORTED ✓', 'active');
+    }
+  };
+
+  mediaRecorder.start(200);   // 200ms chunks — reduces chunk count for long videos
+  if (bgVideo) bgVideo.play();
+  srcVideo.play();
+  isPlaying = isRecording = true;
+
+  // Auto-stop when the faculty video reaches its end
+  srcVideo.addEventListener('ended', function _autoStop() {
+    srcVideo.removeEventListener('ended', _autoStop);
+    if (isRecording) setTimeout(() => stopRecord(), 1500);  // 1.5s — capture the last slide frame
+  });
+
+  document.getElementById('play-btn').textContent = '⏸ Pause';
+  document.getElementById('rec-btn').textContent = '⏹ Stop';
+  document.getElementById('export-btn').textContent = '⏹ Stop & Save';
+  setStatus('RECORDING', 'recording'); document.getElementById('stat-mode').textContent = 'Recording';
+  if (!rafId) rafId = requestAnimationFrame(renderLoop);
+}
+
+function stopRecord() {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+  srcVideo.pause();
+  if (bgVideo) bgVideo.pause();
+  isPlaying = isRecording = false;
+  document.getElementById('play-btn').textContent = '▶ Play';
+}
+
+// ─── File Inputs ──────────────────────────────────────────────────────────────
+document.getElementById('fg-input').onchange = e => { if (e.target.files[0]) setupFg(e.target.files[0]); };
+document.getElementById('bg-input').onchange = e => {
+  const files = e.target.files;
+  if (!files.length) return;
+  const f = files[0];
+  if (f.name.toLowerCase().endsWith('.pptx')) uploadAndConvertPPTX(f);
+  else if (f.type.startsWith('video/'))       setupBgVideo(f);
+  else                                         loadSlides(files);
+};
+
+async function uploadAndConvertPPTX(file) {
+  const btn = document.getElementById('bg-btn');
+  btn.textContent = 'Converting PPTX…';
+  btn.disabled = true;
+  setStatus('Uploading & converting PPTX…');
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  let data;
+  try {
+    const res = await fetch('/api/convert_pptx', {method: 'POST', body: fd});
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Server ${res.status}: ${txt}`);
+    }
+    data = await res.json();
+  } catch (err) {
+    btn.textContent = '+ Upload Slides, PPTX or MP4';
+    btn.disabled = false;
+    setStatus('PPTX upload failed: ' + err.message);
+    return;
+  }
+
+  if (data.error) {
+    btn.textContent = '+ Upload Slides, PPTX or MP4';
+    btn.disabled = false;
+    setStatus('PPTX conversion failed: ' + data.error);
+    return;
+  }
+
+  btn.disabled = false;
+  setStatus('Loading slides…');
+  const urls = data.slides.map(p => '/api/slide_image/' + p);
+  loadSlidesFromUrls(urls, data.person_boxes);
+}
+
+function loadSlidesFromUrls(urls, personBoxes) {
+  slides = [];
+  let loaded = 0;
+  urls.forEach((url, i) => {
+    const img = new Image();
+    img.onload = () => {
+      const name    = url.split('/').pop();
+      const pb      = personBoxes ? personBoxes[i] : null;
+      // Always run JS content detection first.
+      // Only allow person-replace when the slide is blank or photo-background —
+      // slides with real content (left/full) must never be overridden by a
+      // person box, which is frequently a false positive from stock photos or
+      // decorative template illustrations.
+      const jsState     = detectSlideContent(img);
+      const canReplace  = false;  // REPLACE mode disabled for PPTX slides
+      const contentState = (pb && canReplace) ? 'person' : jsState;
+      const personBox    = contentState === 'person' ? pb : null;
+      slides.push({img, contentState, personBox, name, url: img.src});
+      loaded++;
+      if (loaded === urls.length) finalizeSlides();
+    };
+    img.onerror = () => { loaded++; if (loaded === urls.length) finalizeSlides(); };
+    img.src = url;
+  });
+}
+
+// ─── Keyboard Shortcuts ───────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === 'ArrowLeft')  { e.preventDefault(); prevSlide(); }
+  if (e.key === 'ArrowRight') { e.preventDefault(); nextSlide(); }
+  if (e.key === ' ')          { e.preventDefault(); togglePlay(); }
+  if (e.key === 'r' || e.key === 'R') rewindVideo();
+});
+
+// ─── Drag & Drop ──────────────────────────────────────────────────────────────
+const dropOverlay = document.getElementById('drop-overlay');
+document.addEventListener('dragover', e => { e.preventDefault(); dropOverlay.classList.add('visible'); });
+document.addEventListener('dragleave', e => { if (!e.relatedTarget) dropOverlay.classList.remove('visible'); });
+document.addEventListener('drop', e => {
+  e.preventDefault(); dropOverlay.classList.remove('visible');
+  const files  = Array.from(e.dataTransfer.files);
+  const pptx   = files.find(f => f.name.toLowerCase().endsWith('.pptx'));
+  const images = files.filter(f => f.type.startsWith('image/'));
+  const videos = files.filter(f => f.type.startsWith('video/'));
+  const video  = videos[0];
+  if (pptx) {
+    uploadAndConvertPPTX(pptx);
+  } else if (images.length > 0) {
+    loadSlides(images);
+  } else if (videos.length >= 2) {
+    // two videos dropped at once: first → fg, second → bg
+    setupFg(videos[0]);
+    setupBgVideo(videos[1]);
+  } else if (video && !hasFg) {
+    setupFg(video);
+  } else if (video && hasFg && !useBgVideo) {
+    setupBgVideo(video);
+  }
+});
+
+// ─── Eyedropper ───────────────────────────────────────────────────────────────
+let eyedropMode = false;
+
+function toggleEyedrop() {
+  eyedropMode = !eyedropMode;
+  outCanvas.style.cursor = eyedropMode ? 'crosshair' : '';
+  const btn = document.getElementById('eyedrop-btn');
+  btn.style.color        = eyedropMode ? 'var(--amber)' : '';
+  btn.style.borderColor  = eyedropMode ? 'var(--amber)' : '';
+  btn.textContent        = eyedropMode ? '✕ Cancel' : '⊕ Pick';
+}
+
+outCanvas.addEventListener('click', e => {
+  if (!eyedropMode || !hasFg) return;
+  const rect = outCanvas.getBoundingClientRect();
+  const x = Math.round((e.clientX - rect.left) * outCanvas.width  / rect.width);
+  const y = Math.round((e.clientY - rect.top)  * outCanvas.height / rect.height);
+  // Sample from the raw (unkeyed) source canvas so we always get the true green
+  const px = srcCtx.getImageData(x, y, 1, 1).data;
+  const hex = '#' + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+  document.getElementById('key-color').value = hex;
+  document.querySelectorAll('.chips .chip').forEach(c => c.classList.remove('active'));
+  toggleEyedrop();
+  processFrame();
+});
+
+// ─── Backend Integration ──────────────────────────────────────────────────────
+let beRunning = false;
+
+// ─── Slide Timings (auto-advance during playback) ─────────────────────────────
+async function loadSlideTimings(filename) {
+  try {
+    const res = await fetch('/api/slide_image/' + encodeURIComponent(filename),
+                            { signal: AbortSignal.timeout(4000) });
+    if (!res.ok) { slideTimings = null; return; }
+    slideTimings   = await res.json();
+    lastTimedSlide = -1;
+    setStatus(`Timings loaded — ${slideTimings.length} slide entries`, 'active');
+    renderTimingTrack();
+  } catch(e) {
+    slideTimings = null;
+    renderTimingTrack();
+  }
+}
+
+function updateSyncSections() {
+  const slides = document.getElementById('be-slides').value;
+  const isPptx = slides.toLowerCase().endsWith('.pptx');
+  document.getElementById('vsb-sync-section').style.display  = isPptx ? 'none' : '';
+  document.getElementById('pptx-sync-section').style.display = isPptx ? '' : 'none';
+}
+
+async function browseUpload(selectId, kind) {
+  const inputId = selectId + '-file';
+  const statusId = selectId + '-upload-status';
+  const fileInput = document.getElementById(inputId);
+  fileInput.onchange = async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+    const statusEl = document.getElementById(statusId);
+    statusEl.textContent = `Uploading ${file.name}…`;
+    statusEl.style.display = '';
+    statusEl.style.color = 'var(--muted)';
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Upload failed');
+      // Add to dropdown if not already present, then select it
+      const sel = document.getElementById(selectId);
+      if (![...sel.options].some(o => o.value === data.filename)) {
+        sel.appendChild(new Option(data.filename, data.filename));
+      }
+      sel.value = data.filename;
+      sel.dispatchEvent(new Event('change'));
+      statusEl.textContent = `✓ ${data.filename} ready`;
+      statusEl.style.color = 'var(--green)';
+    } catch (err) {
+      const statusEl = document.getElementById(statusId);
+      statusEl.textContent = `✗ ${err.message}`;
+      statusEl.style.color = '#f87171';
+    }
+    fileInput.value = '';
+  };
+  fileInput.click();
+}
+
+async function loadBackendFiles() {
+  try {
+    const res = await fetch('/api/files', { signal: AbortSignal.timeout(2000) });
+    if (!res.ok) throw new Error();
+    const files = await res.json();
+
+    const vExts = new Set(['.mp4', '.mov', '.avi', '.mkv', '.webm']);
+    const videos    = files.filter(f => vExts.has(f.ext));
+    const allSlides = files.filter(f => vExts.has(f.ext) || f.ext === '.pptx');
+
+    const fSel = document.getElementById('be-faculty');
+    const sSel = document.getElementById('be-slides');
+    videos.forEach(f => fSel.appendChild(new Option(f.name, f.name)));
+    allSlides.forEach(f => sSel.appendChild(new Option(f.name, f.name)));
+
+    const fv = videos.find(f => /faculty|green.?screen|gs/i.test(f.name));
+    const sv = files.find(f => /\.pptx$/i.test(f.name)) || files.find(f => /slide|ppt/i.test(f.name));
+    if (fv) fSel.value = fv.name;
+    if (sv) sSel.value = sv.name;
+
+    // Show the correct sync section for the auto-selected source
+    updateSyncSections();
+    sSel.addEventListener('change', updateSyncSections);
+
+    document.getElementById('be-hint').textContent = 'Uses key, scale & sensitivity from sliders above.';
+    document.getElementById('be-run-btn').disabled    = false;
+    document.getElementById('sync-btn').disabled      = false;
+    document.getElementById('pptx-sync-btn').disabled = false;
+
+    // Load timings whenever the field changes (manual entry or auto-fill)
+    document.getElementById('be-timings').addEventListener('change', e => {
+      const v = e.target.value.trim();
+      if (v) loadSlideTimings(v); else slideTimings = null;
+    });
+  } catch {
+    // Server not running — buttons stay disabled, hint explains how to start
+  }
+}
+
+async function generateMP4() {
+  if (beRunning) return;
+  const faculty = document.getElementById('be-faculty').value;
+  const slides  = document.getElementById('be-slides').value;
+  if (!faculty || !slides) {
+    alert('Select Faculty Video and Slides Source in the Backend Pipeline section below first.');
+    return;
+  }
+  const output       = document.getElementById('be-output').value.trim() || 'output.mp4';
+  const syncTimings  = document.getElementById('be-sync').value.trim();
+  const pptxTimings  = document.getElementById('be-timings').value.trim();
+  const body = {
+    faculty_video: faculty, slides_source: slides, output,
+    key:           document.getElementById('key-color').value,
+    sim:           +document.getElementById('sim').value,
+    smooth:        +document.getElementById('smooth').value,
+    spill:         +document.getElementById('spill').value / 100,
+    sensitivity:   +document.getElementById('content-thresh').value,
+    lerp_speed:    +document.getElementById('lerp-speed').value / 100,
+    center_scale:  +document.getElementById('center-scale').value / 100,
+    ...(syncTimings && { sync_timings: syncTimings }),
+    ...(pptxTimings && { timings: pptxTimings }),
+    start_slide: +document.getElementById('be-start-slide').value || 0,
+  };
+
+  beRunning = true;
+  const genBtn   = document.getElementById('gen-btn');
+  const logDiv   = document.getElementById('gen-log');
+  const logLines = document.getElementById('gen-log-lines');
+  const dlBtn    = document.getElementById('gen-dl-btn');
+  genBtn.disabled = true;
+  genBtn.textContent = '⏳ Generating…';
+  logDiv.style.display = '';
+  dlBtn.style.display  = 'none';
+  logLines.textContent = '';
+
+  function addLog(line, color) {
+    const s = document.createElement('span');
+    if (color) s.style.color = color;
+    s.textContent = line + '\n';
+    logLines.appendChild(s);
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  try {
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const ln of lines) {
+        if (!ln.startsWith('data: ')) continue;
+        let msg; try { msg = JSON.parse(ln.slice(6)); } catch { continue; }
+        if (msg.type === 'log') {
+          const c = msg.line.startsWith('[ERROR]') ? 'var(--danger)'
+                  : msg.line.startsWith('[DONE]')  ? 'var(--green)'
+                  : msg.line.startsWith('[WARN]')  ? 'var(--amber)' : '';
+          addLog(msg.line, c);
+        } else if (msg.type === 'done') {
+          addLog('Done ✓', 'var(--green)');
+          dlBtn.href = `/api/download/${encodeURIComponent(msg.output)}`;
+          dlBtn.textContent = `↓ Download ${msg.output}`;
+          dlBtn.style.display = 'block';
+          genBtn.textContent = '↓ Generate & Download MP4';
+          genBtn.disabled = beRunning = false;
+        } else if (msg.type === 'error') {
+          addLog(`Failed (exit code ${msg.code || '?'})`, 'var(--danger)');
+          genBtn.textContent = '↓ Generate & Download MP4';
+          genBtn.disabled = beRunning = false;
+        }
+      }
+    }
+  } catch(e) {
+    addLog(`Error: ${e.message}`, 'var(--danger)');
+    genBtn.textContent = '↓ Generate & Download MP4';
+    genBtn.disabled = beRunning = false;
+  }
+}
+
+async function runBackend() {
+  if (beRunning) return;
+  const faculty = document.getElementById('be-faculty').value;
+  const slides  = document.getElementById('be-slides').value;
+  const output  = document.getElementById('be-output').value.trim() || 'output.mp4';
+  if (!faculty || !slides) { alert('Select both faculty video and slides source.'); return; }
+
+  const syncTimings  = document.getElementById('be-sync').value.trim();
+  const pptxTimings  = document.getElementById('be-timings').value.trim();
+  const body = {
+    faculty_video: faculty, slides_source: slides, output,
+    key:           document.getElementById('key-color').value,
+    sim:           +document.getElementById('sim').value,
+    smooth:        +document.getElementById('smooth').value,
+    spill:         +document.getElementById('spill').value / 100,
+    sensitivity:   +document.getElementById('content-thresh').value,
+    lerp_speed:    +document.getElementById('lerp-speed').value / 100,
+    center_scale:  +document.getElementById('center-scale').value / 100,
+    ...(syncTimings && { sync_timings: syncTimings }),
+    ...(pptxTimings && { timings: pptxTimings }),
+    start_slide: +document.getElementById('be-start-slide').value || 0,
+  };
+
+  beRunning = true;
+  const runBtn   = document.getElementById('be-run-btn');
+  const logDiv   = document.getElementById('be-log');
+  const logLines = document.getElementById('be-log-lines');
+  const dlBtn    = document.getElementById('be-dl-btn');
+  runBtn.disabled = true;
+  runBtn.textContent = '⏳ Running…';
+  logDiv.style.display = '';
+  dlBtn.style.display  = 'none';
+  logLines.textContent = '';
+
+  function addLog(line, color) {
+    const s = document.createElement('span');
+    if (color) s.style.color = color;
+    s.textContent = line + '\n';
+    logLines.appendChild(s);
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  try {
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const ln of lines) {
+        if (!ln.startsWith('data: ')) continue;
+        let msg; try { msg = JSON.parse(ln.slice(6)); } catch { continue; }
+        if (msg.type === 'log') {
+          const c = msg.line.startsWith('[ERROR]') ? 'var(--danger)'
+                  : msg.line.startsWith('[DONE]')  ? 'var(--green)'
+                  : msg.line.startsWith('[WARN]')  ? 'var(--amber)' : '';
+          addLog(msg.line, c);
+        } else if (msg.type === 'done') {
+          addLog('Pipeline complete ✓', 'var(--green)');
+          dlBtn.href = `/api/download/${encodeURIComponent(msg.output)}`;
+          dlBtn.textContent = `↓ Download ${msg.output}`;
+          dlBtn.style.display = 'block';
+          runBtn.textContent = '▶ Run Again';
+          runBtn.disabled = beRunning = false;
+        } else if (msg.type === 'error') {
+          addLog(`Pipeline failed (exit code ${msg.code || '?'})`, 'var(--danger)');
+          runBtn.textContent = '▶ Run Pipeline';
+          runBtn.disabled = beRunning = false;
+        }
+      }
+    }
+  } catch (e) {
+    addLog(`Error: ${e.message}`, 'var(--danger)');
+    runBtn.textContent = '▶ Run Pipeline';
+    runBtn.disabled = beRunning = false;
+  }
+}
+
+loadBackendFiles();
+
+// ─── Speech Sync ─────────────────────────────────────────────────────────────
+let syncRunning = false;
+
+async function runSync() {
+  if (syncRunning) return;
+  const faculty = document.getElementById('be-faculty').value;
+  const slides  = document.getElementById('be-slides').value;
+  if (!faculty || !slides) { alert('Select both faculty video and slides source first.'); return; }
+  if (!slides.toLowerCase().endsWith('.mp4') && !slides.toLowerCase().endsWith('.mov')) {
+    alert('Speech sync only applies when the slides source is a video (MP4/MOV).'); return;
+  }
+
+  const outName  = 'sync_timings.json';
+  syncRunning    = true;
+  const syncBtn  = document.getElementById('sync-btn');
+  const logDiv   = document.getElementById('sync-log');
+  const logLines = document.getElementById('sync-log-lines');
+  syncBtn.textContent = '⏳ Syncing…';
+  syncBtn.style.borderColor = 'var(--amber)';
+  syncBtn.style.color       = 'var(--amber)';
+  logDiv.style.display      = '';
+  logLines.textContent      = '';
+
+  function addLog(line, color) {
+    const s = document.createElement('span');
+    if (color) s.style.color = color;
+    s.textContent = line + '\n';
+    logLines.appendChild(s);
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  try {
+    const res = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ faculty_video: faculty, vsb_video: slides, output: outName })
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const ln of lines) {
+        if (!ln.startsWith('data: ')) continue;
+        let msg; try { msg = JSON.parse(ln.slice(6)); } catch { continue; }
+        if (msg.type === 'log') {
+          const c = msg.line.startsWith('[ERROR]') ? 'var(--danger)'
+                  : msg.line.startsWith('[DONE]')  ? 'var(--green)'
+                  : msg.line.startsWith('[WARN]')  ? 'var(--amber)' : '';
+          addLog(msg.line, c);
+        } else if (msg.type === 'done') {
+          addLog('Sync complete ✓ — timings ready', 'var(--green)');
+          document.getElementById('be-sync').value = msg.timings_file;
+          syncBtn.textContent    = '✓ Synced';
+          syncBtn.style.color    = 'var(--green)';
+          syncBtn.style.borderColor = 'var(--green-dim)';
+          syncRunning = false;
+        } else if (msg.type === 'error') {
+          addLog(`Sync failed (code ${msg.code || msg.msg || '?'})`, 'var(--danger)');
+          syncBtn.textContent = '⟳ Auto-Sync';
+          syncBtn.style.color = 'var(--muted)';
+          syncBtn.style.borderColor = 'var(--border)';
+          syncRunning = false;
+        }
+      }
+    }
+  } catch (e) {
+    addLog(`Error: ${e.message}`, 'var(--danger)');
+    syncBtn.textContent = '⟳ Auto-Sync';
+    syncBtn.style.color = 'var(--muted)';
+    syncBtn.style.borderColor = 'var(--border)';
+    syncRunning = false;
+  }
+}
+
+// ─── PPTX Speech Sync ────────────────────────────────────────────────────────
+let pptxSyncRunning = false;
+
+async function runPptxSync() {
+  if (pptxSyncRunning) return;
+  const faculty = document.getElementById('be-faculty').value;
+  const slides  = document.getElementById('be-slides').value;
+  if (!faculty || !slides) { alert('Select both faculty video and PPTX file first.'); return; }
+  if (!slides.toLowerCase().endsWith('.pptx')) {
+    alert('PPTX Sync requires the slides source to be a .pptx file.'); return;
+  }
+
+  const outName       = 'timings.json';
+  pptxSyncRunning     = true;
+  const syncBtn       = document.getElementById('pptx-sync-btn');
+  const logDiv        = document.getElementById('pptx-sync-log');
+  const logLines      = document.getElementById('pptx-sync-log-lines');
+  syncBtn.textContent = '⏳ Syncing…';
+  syncBtn.style.borderColor = 'var(--amber)';
+  syncBtn.style.color       = 'var(--amber)';
+  logDiv.style.display      = '';
+  logLines.textContent      = '';
+
+  function addLog(line, color) {
+    const s = document.createElement('span');
+    if (color) s.style.color = color;
+    s.textContent = line + '\n';
+    logLines.appendChild(s);
+    logDiv.scrollTop = logDiv.scrollHeight;
+  }
+
+  try {
+    const res = await fetch('/api/pptx_sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ faculty_video: faculty, pptx_file: slides, output: outName })
+    });
+    const reader = res.body.getReader();
+    const dec = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const ln of lines) {
+        if (!ln.startsWith('data: ')) continue;
+        let msg; try { msg = JSON.parse(ln.slice(6)); } catch { continue; }
+        if (msg.type === 'log') {
+          const c = msg.line.startsWith('[ERROR]') ? 'var(--danger)'
+                  : msg.line.startsWith('[DONE]')  ? 'var(--green)'
+                  : msg.line.startsWith('[WARN]')  ? 'var(--amber)' : '';
+          addLog(msg.line, c);
+        } else if (msg.type === 'done') {
+          addLog('PPTX sync complete ✓ — timings ready', 'var(--green)');
+          document.getElementById('be-timings').value = msg.timings_file;
+          loadSlideTimings(msg.timings_file);   // auto-load for browser preview
+          syncBtn.textContent    = '✓ Synced';
+          syncBtn.style.color    = 'var(--green)';
+          syncBtn.style.borderColor = 'var(--green-dim)';
+          pptxSyncRunning = false;
+        } else if (msg.type === 'error') {
+          addLog(`Sync failed (code ${msg.code || msg.msg || '?'})`, 'var(--danger)');
+          syncBtn.textContent = '⟳ Sync PPTX';
+          syncBtn.style.color = 'var(--muted)';
+          syncBtn.style.borderColor = 'var(--border)';
+          pptxSyncRunning = false;
+        }
+      }
+    }
+  } catch (e) {
+    addLog(`Error: ${e.message}`, 'var(--danger)');
+    syncBtn.textContent = '⟳ Sync PPTX';
+    syncBtn.style.color = 'var(--muted)';
+    syncBtn.style.borderColor = 'var(--border)';
+    pptxSyncRunning = false;
+  }
+}
+
+// ─── Download popover ────────────────────────────────────────────────────────
+let dlPopoverOpen = false;
+
+async function refreshDlPopover() {
+  const list = document.getElementById('dl-popover-list');
+  list.innerHTML = '<div class="dl-popover-empty">Loading…</div>';
+  try {
+    const res = await fetch('/api/files', { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) throw new Error();
+    const files = await res.json();
+    const mp4s = files.filter(f => f.ext === '.mp4');
+    if (mp4s.length === 0) {
+      list.innerHTML = '<div class="dl-popover-empty">No .mp4 files yet</div>';
+      return;
+    }
+    list.innerHTML = '';
+    mp4s.forEach(f => {
+      const a = document.createElement('a');
+      a.className = 'dl-popover-item';
+      a.href = `/api/download/${encodeURIComponent(f.name)}`;
+      a.download = f.name;
+      a.innerHTML = `<span title="${f.name}">${f.name}</span><em>↓ MP4</em>`;
+      list.appendChild(a);
+    });
+  } catch {
+    list.innerHTML = '<div class="dl-popover-empty">Server not running</div>';
+  }
+}
+
+function toggleDlPopover() {
+  const pop = document.getElementById('dl-popover');
+  const btn = document.getElementById('dl-toggle-btn');
+  dlPopoverOpen = !dlPopoverOpen;
+  pop.style.display = dlPopoverOpen ? '' : 'none';
+  btn.classList.toggle('dl-active', dlPopoverOpen);
+  if (dlPopoverOpen) refreshDlPopover();
+}
+
+document.addEventListener('click', e => {
+  if (!dlPopoverOpen) return;
+  if (!e.target.closest('.dl-popover-wrap')) {
+    document.getElementById('dl-popover').style.display = 'none';
+    document.getElementById('dl-toggle-btn').classList.remove('dl-active');
+    dlPopoverOpen = false;
+  }
+});
+</script>
+</body>
+</html>

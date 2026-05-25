@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChromaKey — Video Compositor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0d0f10; --surface:#161a1c; --border:#2a3035;
+      --green:#00e87a; --green-dim:#00a857; --text:#e8ebed;
+      --muted:#6b7b85; --danger:#ff4d4d; --amber:#f5a623;
+    }
+    body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; display:flex; flex-direction:column; }
+    header { display:flex; align-items:center; gap:14px; padding:13px 28px; border-bottom:1px solid var(--border); background:var(--surface); position:sticky; top:0; z-index:20; }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo-icon { width:32px; height:32px; border-radius:7px; background:var(--green); display:flex; align-items:center; justify-content:center; }
+    .logo-icon svg { width:17px; height:17px; fill:none; stroke:#000; stroke-width:2.2; stroke-linecap:round; stroke-linejoin:round; }
+    .logo-text { font-family:'Syne',sans-serif; font-size:17px; font-weight:700; letter-spacing:-0.5px; color:var(--text); }
+    .logo-text span { color:var(--green); }
+    .header-badge { margin-left:auto; font-size:10px; color:var(--muted); border:1px solid var(--border); padding:3px 10px; border-radius:4px; letter-spacing:1.5px; }
+    .app { display:grid; grid-template-columns:1fr 300px; gap:20px; flex:1; max-width:1160px; width:100%; margin:0 auto; padding:22px 28px; align-items:start; }
+    .left { display:flex; flex-direction:column; gap:14px; }
+    .input-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .vic { background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden; }
+    .vic.fg-active { border-color:var(--green-dim); }
+    .vic-header { display:flex; align-items:center; gap:8px; padding:10px 14px 8px; border-bottom:1px solid var(--border); }
+    .vic-dot { width:8px; height:8px; border-radius:50%; }
+    .dot-fg { background:var(--green); } .dot-bg { background:var(--amber); }
+    .vic-label { font-size:11px; font-weight:500; color:var(--muted); letter-spacing:1px; }
+    .vic-preview { height:120px; display:flex; align-items:center; justify-content:center; background:#0a0c0d; overflow:hidden; }
+    .vic-preview video { max-width:100%; max-height:120px; object-fit:contain; }
+    .vic-empty { display:flex; flex-direction:column; align-items:center; gap:7px; color:var(--muted); font-size:11px; text-align:center; padding:14px; }
+    .vic-empty svg { width:26px; height:26px; opacity:0.2; }
+    .vic-footer { padding:10px 14px; }
+    .upload-btn { width:100%; background:transparent; border:1px dashed var(--border); color:var(--muted); padding:8px 12px; border-radius:7px; font-family:'DM Mono',monospace; font-size:11px; cursor:pointer; transition:border-color .2s,color .2s,background .2s; text-align:center; }
+    .upload-btn:hover { border-color:var(--green-dim); color:var(--green); background:rgba(0,232,122,.04); }
+    .upload-btn.has-file { border-style:solid; border-color:var(--green-dim); color:var(--green); }
+    .canvas-zone { background:var(--surface); border:1px solid var(--border); border-radius:12px; overflow:hidden; position:relative; min-height:340px; display:flex; align-items:center; justify-content:center; }
+    .canvas-zone canvas { max-width:100%; max-height:500px; display:block; }
+    .placeholder { display:flex; flex-direction:column; align-items:center; gap:12px; color:var(--muted); padding:60px 40px; text-align:center; }
+    .placeholder svg { width:52px; height:52px; opacity:0.2; }
+    .placeholder p { font-size:13px; line-height:1.7; }
+    .placeholder small { font-size:11px; color:#3a4a55; }
+    #status-bar { position:absolute; top:12px; left:12px; font-size:11px; padding:4px 12px; border-radius:20px; background:rgba(0,0,0,.8); border:1px solid var(--border); color:var(--muted); letter-spacing:1px; }
+    #status-bar.active { color:var(--green); border-color:var(--green-dim); }
+    #status-bar.recording { color:var(--danger); border-color:var(--danger); animation:blink 1s infinite; }
+    @keyframes blink { 0%,100%{opacity:1}50%{opacity:.4} }
+    .playback-bar { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 16px; display:flex; align-items:center; gap:10px; }
+    .ctrl-btn { background:transparent; border:1px solid var(--border); color:var(--text); border-radius:6px; padding:7px 13px; font-family:'DM Mono',monospace; font-size:12px; cursor:pointer; transition:all .15s; white-space:nowrap; }
+    .ctrl-btn:hover:not(:disabled) { border-color:var(--green-dim); color:var(--green); }
+    .ctrl-btn:disabled { opacity:.35; cursor:not-allowed; }
+    .ctrl-btn.rec { border-color:var(--danger); color:var(--danger); }
+    .ctrl-btn.rec:hover:not(:disabled) { background:rgba(255,77,77,.1); }
+    #timeline { flex:1; accent-color:var(--green); cursor:pointer; height:4px; }
+    .time-disp { font-size:11px; color:var(--muted); min-width:64px; text-align:right; }
+    .panel { display:flex; flex-direction:column; gap:13px; }
+    .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 16px 14px; }
+    .card-title { font-family:'Syne',sans-serif; font-size:10px; font-weight:600; color:var(--muted); letter-spacing:2.5px; text-transform:uppercase; margin-bottom:13px; }
+    .slider-row { margin-bottom:10px; } .slider-row:last-child { margin-bottom:0; }
+    .slider-label { display:flex; justify-content:space-between; margin-bottom:5px; }
+    .slider-label span:first-child { font-size:12px; color:var(--muted); }
+    .slider-label span:last-child  { font-size:12px; color:var(--green); font-weight:500; }
+    input[type=range] { width:100%; accent-color:var(--green); cursor:pointer; height:4px; }
+    .color-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+    input[type=color] { width:34px; height:26px; border:1px solid var(--border); border-radius:4px; background:none; cursor:pointer; padding:2px; }
+    .color-label { font-size:12px; color:var(--muted); }
+    .chips { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px; }
+    .chip { font-size:11px; padding:3px 10px; border-radius:4px; border:1px solid var(--border); color:var(--muted); cursor:pointer; transition:all .15s; user-select:none; }
+    .chip:hover,.chip.active { border-color:var(--green-dim); color:var(--green); background:rgba(0,232,122,.06); }
+    .pos-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:5px; margin-bottom:10px; }
+    .pos-btn { background:transparent; border:1px solid var(--border); border-radius:5px; padding:6px; font-size:17px; cursor:pointer; text-align:center; transition:all .15s; line-height:1; }
+    .pos-btn:hover,.pos-btn.active { border-color:var(--green-dim); background:rgba(0,232,122,.08); }
+    .action-btn { width:100%; padding:11px; border-radius:8px; font-family:'Syne',sans-serif; font-size:13px; font-weight:600; cursor:pointer; border:none; transition:all .2s; letter-spacing:.5px; }
+    .btn-primary { background:var(--green); color:#000; }
+    .btn-primary:hover:not(:disabled) { background:#00ff88; }
+    .btn-primary:disabled { background:var(--border); color:var(--muted); cursor:not-allowed; }
+    footer { border-top:1px solid var(--border); padding:10px 28px; font-size:11px; color:var(--muted); display:flex; gap:24px; background:var(--surface); }
+    .stat { display:flex; gap:7px; align-items:center; }
+    #dl-link { display:none; }
+    .drop-overlay { position:fixed; inset:0; background:rgba(0,232,122,.07); border:2px dashed var(--green); z-index:100; display:flex; align-items:center; justify-content:center; font-family:'Syne',sans-serif; font-size:20px; color:var(--green); pointer-events:none; opacity:0; transition:opacity .15s; }
+    .drop-overlay.visible { opacity:1; }
+    @media(max-width:860px){ .app{grid-template-columns:1fr;padding:14px} header{padding:12px 16px} footer{padding:10px 16px;flex-wrap:wrap;gap:12px} }
+    @media(max-width:520px){ .input-row{grid-template-columns:1fr} }
+  </style>
+</head>
+<body>
+
+<div class="drop-overlay" id="drop-overlay">Drop video here</div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 20 20"><polyline points="3,14 7,9 11,12 15,6"/><circle cx="15" cy="6" r="2.2"/></svg>
+    </div>
+    <div class="logo-text">chroma<span>key</span></div>
+  </div>
+  <div class="header-badge">BROWSER · NO UPLOAD · FREE</div>
+</header>
+
+<main class="app">
+  <div class="left">
+
+    <!-- Two video inputs -->
+    <div class="input-row">
+      <div class="vic" id="fg-card">
+        <div class="vic-header">
+          <div class="vic-dot dot-fg"></div>
+          <span class="vic-label">FOREGROUND · GREEN SCREEN</span>
+        </div>
+        <div class="vic-preview">
+          <div class="vic-empty" id="fg-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M10 10l4-2v6l-4-2"/></svg>
+            <span>Green screen video</span>
+          </div>
+          <video id="src-video" playsinline muted style="display:none"></video>
+        </div>
+        <div class="vic-footer">
+          <input type="file" id="fg-input" accept="video/*" style="display:none" />
+          <button class="upload-btn" id="fg-btn" onclick="document.getElementById('fg-input').click()">+ Upload Foreground</button>
+        </div>
+      </div>
+
+      <div class="vic">
+        <div class="vic-header">
+          <div class="vic-dot dot-bg"></div>
+          <span class="vic-label">BACKGROUND · VIDEO</span>
+        </div>
+        <div class="vic-preview">
+          <div class="vic-empty" id="bg-empty">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+            <span>Background video</span>
+          </div>
+          <video id="bg-video-el" playsinline muted loop style="display:none"></video>
+        </div>
+        <div class="vic-footer">
+          <input type="file" id="bg-input" accept="video/*" style="display:none" />
+          <button class="upload-btn" id="bg-btn" onclick="document.getElementById('bg-input').click()">+ Upload Background</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div class="canvas-zone">
+      <div class="placeholder" id="placeholder">
+        <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.3">
+          <rect x="2" y="8" width="44" height="30" rx="3"/>
+          <rect x="6" y="12" width="36" height="22" rx="2" stroke-dasharray="3 2"/>
+          <path d="M20 22l5-3v8l-5-3"/>
+          <path d="M30 18v12M27 21l3-3 3 3M27 27l3 3 3-3"/>
+        </svg>
+        <p>Upload both videos to composite</p>
+        <small>Green screen subject will be keyed and layered over your background</small>
+      </div>
+      <canvas id="output-canvas" style="display:none"></canvas>
+      <div id="status-bar">IDLE</div>
+    </div>
+
+    <!-- Playback bar -->
+    <div class="playback-bar">
+      <button class="ctrl-btn" id="rewind-btn" onclick="rewindVideo()" disabled>⟪</button>
+      <button class="ctrl-btn" id="play-btn"   onclick="togglePlay()"  disabled>▶ Play</button>
+      <input type="range" id="timeline" min="0" max="100" value="0" step="0.1" oninput="seekVideo(this.value)" disabled />
+      <span class="time-disp" id="time-disp">0.0 / 0.0s</span>
+      <button class="ctrl-btn rec" id="rec-btn" onclick="toggleRecord()" disabled>⏺ Export</button>
+    </div>
+  </div>
+
+  <!-- Side Panel -->
+  <div class="panel">
+
+    <div class="card">
+      <div class="card-title">Chroma Key</div>
+      <div class="color-row">
+        <input type="color" id="key-color" value="#00b140" />
+        <span class="color-label">Key color</span>
+      </div>
+      <div class="chips">
+        <span class="chip active" onclick="setKeyColor('#00b140',this)">Green</span>
+        <span class="chip" onclick="setKeyColor('#0047ab',this)">Blue</span>
+        <span class="chip" onclick="setKeyColor('#cc0000',this)">Red</span>
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Similarity</span><span id="sim-val">35</span></div>
+        <input type="range" min="1" max="120" value="35" step="1" id="sim" oninput="document.getElementById('sim-val').textContent=this.value" />
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Smoothness</span><span id="smooth-val">8</span></div>
+        <input type="range" min="0" max="40" value="8" step="1" id="smooth" oninput="document.getElementById('smooth-val').textContent=this.value" />
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Spill Suppression</span><span id="spill-val">30</span></div>
+        <input type="range" min="0" max="100" value="30" step="1" id="spill" oninput="document.getElementById('spill-val').textContent=this.value" />
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Foreground Layer</div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Scale</span><span id="scale-val">100%</span></div>
+        <input type="range" min="10" max="200" value="100" step="1" id="fg-scale" oninput="document.getElementById('scale-val').textContent=this.value+'%'" />
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>Opacity</span><span id="opacity-val">100%</span></div>
+        <input type="range" min="0" max="100" value="100" step="1" id="fg-opacity" oninput="document.getElementById('opacity-val').textContent=this.value+'%'" />
+      </div>
+      <div class="slider-row">
+        <div class="slider-label"><span>X Offset</span><span id="x-val">0</span></div>
+        <input type="range" min="-100" max="100" value="0" step="1" id="fg-x" oninput="document.getElementById('x-val').textContent=this.value" />
+      </div>
+      <div class="slider-row" style="margin-bottom:12px">
+        <div class="slider-label"><span>Y Offset</span><span id="y-val">0</span></div>
+        <input type="range" min="-100" max="100" value="0" step="1" id="fg-y" oninput="document.getElementById('y-val').textContent=this.value" />
+      </div>
+      <div class="card-title" style="margin-top:2px">Anchor</div>
+      <div class="pos-grid">
+        <button class="pos-btn" onclick="setPos('tl',this)">↖</button>
+        <button class="pos-btn" onclick="setPos('tc',this)">↑</button>
+        <button class="pos-btn" onclick="setPos('tr',this)">↗</button>
+        <button class="pos-btn" onclick="setPos('ml',this)">←</button>
+        <button class="pos-btn active" onclick="setPos('mc',this)">◉</button>
+        <button class="pos-btn" onclick="setPos('mr',this)">→</button>
+        <button class="pos-btn" onclick="setPos('bl',this)">↙</button>
+        <button class="pos-btn" onclick="setPos('bc',this)">↓</button>
+        <button class="pos-btn" onclick="setPos('br',this)">↘</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Background Sync</div>
+      <div class="slider-row">
+        <div class="slider-label"><span>BG Start Offset (s)</span><span id="offset-val">0.0</span></div>
+        <input type="range" min="-30" max="30" value="0" step="0.1" id="bg-offset"
+          oninput="document.getElementById('offset-val').textContent=parseFloat(this.value).toFixed(1)" />
+      </div>
+      <div class="chips">
+        <span class="chip active" id="loop-chip" onclick="toggleLoop(this)">Loop BG</span>
+        <span class="chip" id="sync-chip" onclick="toggleSync(this)">Sync on Play</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Export</div>
+      <button class="action-btn btn-primary" id="export-btn" onclick="toggleRecord()" disabled>
+        ⏺ Record & Export WebM
+      </button>
+      <a id="dl-link" download="composite.webm"></a>
+      <p style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.7">
+        Rewinds both videos, renders the<br/>full composition and downloads a <code>.webm</code>.
+      </p>
+    </div>
+
+    <div class="card" style="border-style:dashed">
+      <div class="card-title">Tips</div>
+      <ul style="font-size:11px;color:var(--muted);line-height:2.1;padding-left:14px">
+        <li>First dropped video → foreground</li>
+        <li>Second dropped video → background</li>
+        <li>Scale + Anchor to reframe subject</li>
+        <li>BG Offset shifts background timing</li>
+        <li>All processing stays in your browser</li>
+      </ul>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <div class="stat"><span style="color:var(--muted)">Frames</span><span id="stat-frames">—</span></div>
+  <div class="stat"><span style="color:var(--muted)">Resolution</span><span id="stat-res">—</span></div>
+  <div class="stat"><span style="color:var(--muted)">FG Duration</span><span id="stat-dur">—</span></div>
+  <div class="stat"><span style="color:var(--muted)">Status</span><span id="stat-mode">Idle</span></div>
+</footer>
+
+<canvas id="src-canvas" style="display:none"></canvas>
+
+<script>
+const srcVideo  = document.getElementById('src-video');
+const bgVideoEl = document.getElementById('bg-video-el');
+const srcCanvas = document.getElementById('src-canvas');
+const srcCtx    = srcCanvas.getContext('2d',{willReadFrequently:true});
+const outCanvas = document.getElementById('output-canvas');
+const outCtx    = outCanvas.getContext('2d');
+const timeline  = document.getElementById('timeline');
+
+let hasFg=false, hasBg=false;
+let isPlaying=false, isRecording=false;
+let mediaRecorder=null, chunks=[];
+let rafId=null, frameCount=0, fgDuration=0;
+let anchorPos='mc', bgLoop=true, syncStart=false;
+
+function hexToRgb(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];}
+function setStatus(t,c=''){const e=document.getElementById('status-bar');e.textContent=t;e.className=c;}
+
+function setKeyColor(c,el){
+  document.getElementById('key-color').value=c;
+  document.querySelectorAll('.chips .chip').forEach(x=>x.classList.remove('active'));
+  if(el)el.classList.add('active');
+}
+function setPos(p,el){
+  anchorPos=p;
+  document.querySelectorAll('.pos-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active');
+}
+function toggleLoop(el){bgLoop=!bgLoop;el.classList.toggle('active',bgLoop);bgVideoEl.loop=bgLoop;}
+function toggleSync(el){syncStart=!syncStart;el.classList.toggle('active',syncStart);}
+
+function processFrame(){
+  if(!hasFg)return;
+  const W=srcCanvas.width,H=srcCanvas.height;
+  srcCtx.drawImage(srcVideo,0,0,W,H);
+  const imgData=srcCtx.getImageData(0,0,W,H);
+  const d=imgData.data;
+  const sim=+document.getElementById('sim').value;
+  const smooth=+document.getElementById('smooth').value;
+  const spillAmt=+document.getElementById('spill').value/100;
+  const[kr,kg,kb]=hexToRgb(document.getElementById('key-color').value);
+
+  for(let i=0;i<d.length;i+=4){
+    const r=d[i],g=d[i+1],b=d[i+2];
+    const dist=Math.sqrt((r-kr)**2+(g-kg)**2+(b-kb)**2);
+    let alpha=dist<sim?0:dist<sim+smooth?(dist-sim)/smooth:1;
+    if(alpha<1&&spillAmt>0){
+      const sf=(1-alpha)*spillAmt;
+      if(kg>=kr&&kg>=kb)     d[i+1]=Math.max(0,g-(g-Math.max(r,b))*sf);
+      else if(kb>=kr&&kb>=kg)d[i+2]=Math.max(0,b-(b-Math.max(r,g))*sf);
+      else                   d[i]  =Math.max(0,r-(r-Math.max(g,b))*sf);
+    }
+    d[i+3]=Math.round(alpha*255);
+  }
+
+  const OW=outCanvas.width,OH=outCanvas.height;
+  if(hasBg&&!bgVideoEl.paused){outCtx.drawImage(bgVideoEl,0,0,OW,OH);}
+  else{outCtx.fillStyle='#111';outCtx.fillRect(0,0,OW,OH);}
+
+  const scale=+document.getElementById('fg-scale').value/100;
+  const opacity=+document.getElementById('fg-opacity').value/100;
+  const offX=+document.getElementById('fg-x').value/100*OW;
+  const offY=+document.getElementById('fg-y').value/100*OH;
+  const fgW=OW*scale,fgH=OH*scale;
+  let ax=0,ay=0;
+  if(anchorPos[1]==='c')ax=(OW-fgW)/2;
+  else if(anchorPos[1]==='r')ax=OW-fgW;
+  if(anchorPos[0]==='m')ay=(OH-fgH)/2;
+  else if(anchorPos[0]==='b')ay=OH-fgH;
+
+  srcCtx.putImageData(imgData,0,0);
+  outCtx.globalAlpha=opacity;
+  outCtx.drawImage(srcCanvas,ax+offX,ay+offY,fgW,fgH);
+  outCtx.globalAlpha=1;
+
+  frameCount++;
+  document.getElementById('stat-frames').textContent=frameCount;
+  if(!isRecording&&fgDuration>0){
+    const t=srcVideo.currentTime;
+    timeline.value=(t/fgDuration)*100;
+    document.getElementById('time-disp').textContent=t.toFixed(1)+' / '+fgDuration.toFixed(1)+'s';
+  }
+}
+
+function renderLoop(){
+  if(!srcVideo.paused&&!srcVideo.ended)processFrame();
+  rafId=requestAnimationFrame(renderLoop);
+}
+
+function setupFg(file){
+  srcVideo.src=URL.createObjectURL(file);
+  srcVideo.load();
+  srcVideo.onloadedmetadata=()=>{
+    const W=srcVideo.videoWidth,H=srcVideo.videoHeight;
+    srcCanvas.width=W;srcCanvas.height=H;
+    outCanvas.width=W;outCanvas.height=H;
+    fgDuration=srcVideo.duration;
+    document.getElementById('placeholder').classList.add('hidden');
+    outCanvas.style.display='block';
+    document.getElementById('stat-res').textContent=W+'×'+H;
+    document.getElementById('stat-dur').textContent=isFinite(fgDuration)?fgDuration.toFixed(1)+'s':'—';
+    timeline.disabled=false; hasFg=true;
+    const btn=document.getElementById('fg-btn');
+    btn.classList.add('has-file');btn.textContent='✓ '+file.name.substring(0,24);
+    srcVideo.style.display='block';
+    document.getElementById('fg-empty').style.display='none';
+    updateReady();processFrame();
+  };
+}
+
+function setupBg(file){
+  bgVideoEl.src=URL.createObjectURL(file);
+  bgVideoEl.loop=bgLoop;
+  bgVideoEl.load();
+  bgVideoEl.onloadedmetadata=()=>{
+    bgVideoEl.style.display='block';
+    document.getElementById('bg-empty').style.display='none';
+    hasBg=true;
+    const btn=document.getElementById('bg-btn');
+    btn.classList.add('has-file');btn.textContent='✓ '+file.name.substring(0,24);
+    updateReady();
+  };
+}
+
+function updateReady(){
+  const ok=hasFg;
+  ['play-btn','rewind-btn','rec-btn','export-btn'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.disabled=!ok;
+  });
+  if(ok){setStatus('READY','active');document.getElementById('stat-mode').textContent='Ready';}
+}
+
+function togglePlay(){
+  if(!hasFg)return;
+  if(isPlaying){
+    srcVideo.pause();bgVideoEl.pause();
+    isPlaying=false;
+    document.getElementById('play-btn').textContent='▶ Play';
+    setStatus('PAUSED','');document.getElementById('stat-mode').textContent='Paused';
+  }else{
+    if(syncStart){const off=+document.getElementById('bg-offset').value;bgVideoEl.currentTime=Math.max(0,off);}
+    srcVideo.play();if(hasBg)bgVideoEl.play();
+    isPlaying=true;
+    document.getElementById('play-btn').textContent='⏸ Pause';
+    setStatus('PLAYING','active');document.getElementById('stat-mode').textContent='Playing';
+    if(!rafId)rafId=requestAnimationFrame(renderLoop);
+  }
+}
+
+function rewindVideo(){
+  srcVideo.currentTime=0;
+  const off=+document.getElementById('bg-offset').value;
+  bgVideoEl.currentTime=Math.max(0,off);
+  timeline.value=0;
+  document.getElementById('time-disp').textContent='0.0 / '+fgDuration.toFixed(1)+'s';
+  processFrame();
+}
+
+function seekVideo(pct){
+  if(!hasFg)return;
+  const t=(pct/100)*fgDuration;
+  srcVideo.currentTime=t;
+  const off=+document.getElementById('bg-offset').value;
+  if(hasBg)bgVideoEl.currentTime=Math.max(0,t+off);
+  document.getElementById('time-disp').textContent=t.toFixed(1)+' / '+fgDuration.toFixed(1)+'s';
+  processFrame();
+}
+
+srcVideo.onended=()=>{
+  if(isRecording)stopRecord();
+  isPlaying=false;
+  document.getElementById('play-btn').textContent='▶ Play';
+  setStatus('DONE','active');document.getElementById('stat-mode').textContent='Done';
+};
+
+function toggleRecord(){
+  if(isRecording){stopRecord();return;}
+  if(!hasFg)return;
+  chunks=[];
+  const stream=outCanvas.captureStream(30);
+  const mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')?'video/webm;codecs=vp9':'video/webm';
+  mediaRecorder=new MediaRecorder(stream,{mimeType:mime});
+  mediaRecorder.ondataavailable=e=>{if(e.data.size>0)chunks.push(e.data);};
+  mediaRecorder.onstop=()=>{
+    const blob=new Blob(chunks,{type:'video/webm'});
+    const a=document.getElementById('dl-link');
+    a.href=URL.createObjectURL(blob);a.click();
+    setStatus('EXPORTED ✓','active');document.getElementById('stat-mode').textContent='Exported';
+    document.getElementById('rec-btn').textContent='⏺ Export';
+    document.getElementById('export-btn').textContent='⏺ Record & Export WebM';
+    isRecording=false;
+  };
+  mediaRecorder.start(100);
+  srcVideo.currentTime=0;
+  const off=+document.getElementById('bg-offset').value;
+  if(hasBg){bgVideoEl.currentTime=Math.max(0,off);bgVideoEl.play();}
+  srcVideo.play();
+  isPlaying=isRecording=true;
+  document.getElementById('play-btn').textContent='⏸ Pause';
+  document.getElementById('rec-btn').textContent='⏹ Stop';
+  document.getElementById('export-btn').textContent='⏹ Stop & Save';
+  setStatus('RECORDING','recording');document.getElementById('stat-mode').textContent='Recording';
+  if(!rafId)rafId=requestAnimationFrame(renderLoop);
+}
+
+function stopRecord(){
+  if(mediaRecorder&&mediaRecorder.state!=='inactive')mediaRecorder.stop();
+  srcVideo.pause();bgVideoEl.pause();
+  isPlaying=isRecording=false;
+  document.getElementById('play-btn').textContent='▶ Play';
+}
+
+document.getElementById('fg-input').onchange=e=>{if(e.target.files[0])setupFg(e.target.files[0]);};
+document.getElementById('bg-input').onchange=e=>{if(e.target.files[0])setupBg(e.target.files[0]);};
+
+const dropOverlay=document.getElementById('drop-overlay');
+document.addEventListener('dragover',e=>{e.preventDefault();dropOverlay.classList.add('visible');});
+document.addEventListener('dragleave',e=>{if(!e.relatedTarget)dropOverlay.classList.remove('visible');});
+document.addEventListener('drop',e=>{
+  e.preventDefault();dropOverlay.classList.remove('visible');
+  const file=e.dataTransfer.files[0];
+  if(!file||!file.type.startsWith('video/'))return;
+  if(!hasFg)setupFg(file);else setupBg(file);
+});
+</script>
+</body>
+</html>
