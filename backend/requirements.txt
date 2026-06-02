@@ -1,3 +1,16 @@
 opencv-python-headless>=4.8
 numpy>=1.24
 pymupdf>=1.22
+
+# POC 2 dependencies
+python-pptx>=0.6.21       # speaker notes + slide parsing
+rembg>=2.0.50             # ML-based background removal for reference frame
+Pillow>=10.0              # required by rembg
+
+# POC 3 dependencies
+python-docx>=1.1.0        # Word document (.docx) parsing
+openai>=1.30.0            # GPT API — storyboard generation + TTS
+lxml>=4.9                 # required by python-pptx shape manipulation
+google-genai>=1.0.0       # Gemini Imagen — slide image generation
+moviepy>=1.0.3            # video assembly (requires ffmpeg system binary)
+gTTS>=2.3.0               # free TTS fallback (no API key needed)
