@@ -1,0 +1,22 @@
+CS_W8_S4_VSB_V1_Reviewed4321.pptx
+avatar_base.mp4
+faculty_3min_480p.mp4
+faculty_3min_audio.wav
+faculty_3min.mp4
+faculty_7sec.wav
+faculty_30sec.mp4
+faculty_audio_original.wav
+faculty_clean.mp4
+faculty_face.jpg
+faculty_hellostudents.wav
+Green-screen Faculty Recording.mp4
+slides_temp.pdf
+temp_video_no_audio.mp4
+slides_output/
+final_output/
+avatar_videos/
+avatar_base_480p.mp4
+# .gitignore
+Wav2Lip/Wav2Lip
+faculty_30sec.wav
+Wav2Lip/
