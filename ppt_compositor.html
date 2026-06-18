@@ -694,7 +694,7 @@ let _lastChromaTime = -1;
 // Slide crossfade transition
 let prevSlideImg       = null;   // HTMLImageElement of slide being faded out
 let slideXfadeAlpha    = 1.0;    // 0 = fully prev, 1 = fully current
-const SLIDE_XFADE_SPEED = 1 / 18; // ~18 frames = 0.6s at 30fps
+const SLIDE_XFADE_SPEED = 1 / 24; // ~24 frames = 0.8s at 30fps — smoother transition
 
 // Timings-driven auto-advance
 let slideTimings   = null;   // [{slide, start, end}, ...] loaded from timings.json
@@ -787,13 +787,17 @@ function detectSlideContent(img) {
   return 'full';
 }
 
-// Maps a content state to a position mode
+// Maps a content state to a position mode.
+// Faculty is shown ONLY on full-screen slides (no text/diagram content):
+//   'blank' → covers and section dividers (1B_Intro-Outro, 1D_Wide Screen) → center
+//   'photo' → video-background frames → center
+//   'left'  → bullet/content slides (60:40 layouts) → HIDDEN (design requirement)
+//   'full'  → image+text slides → HIDDEN
 function contentStateToMode(state) {
   if (state === 'blank')  return 'center';
-  if (state === 'left')   return 'right';
+  if (state === 'photo')  return 'center';
   if (state === 'person') return 'replace';
-  if (state === 'photo')  return 'center';   // tentative until async person detection resolves
-  return 'hidden';
+  return 'hidden';   // 'left' and 'full' → professor hidden on content slides
 }
 
 // Async person detection for video-background frames.
@@ -995,6 +999,10 @@ function gotoSlide(idx) {
     prevSlideImg    = slides[currentSlideIdx].img;
     slideXfadeAlpha = 0.0;
   }
+
+  // Force a fresh chroma-key pass on the next frame so the faculty layer
+  // never lags one frame behind the new background during the crossfade.
+  _lastChromaTime = -1;
 
   // Deactivate old thumb
   const oldThumb = document.getElementById(`thumb-${currentSlideIdx}`);
@@ -1207,12 +1215,15 @@ function recalcTargets(smooth = true) {
     x = (OW - w) / 2;
     y = (OH - h) / 2;
   } else if (posMode === 'right') {
-    const scale = +document.getElementById('center-scale').value / 100;  // same size as center
+    // Right mode: use 55 % of center-scale so the professor is smaller and doesn't
+    // obscure slide content; bottom-aligned so the standing figure looks grounded.
+    const centerScale = +document.getElementById('center-scale').value / 100;
+    const rightScale  = centerScale * 0.55;
     const margin = +document.getElementById('right-margin').value / 100;
-    h = OH * scale;
+    h = OH * rightScale;
     w = h * aspect;
     x = OW - w - OW * margin;
-    y = (OH - h) / 2;  // vertically centered, same as center mode
+    y = OH - h;   // bottom-aligned
   } else if (posMode === 'replace') {
     const pb = useBgVideo ? livePersonBox : slides[currentSlideIdx]?.personBox;
     if (pb) {

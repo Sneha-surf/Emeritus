@@ -345,11 +345,12 @@ def get_target(content_state: str, OW: int, OH: int, fac_aspect: float,
         y = (OH - h) / 2.0
         return x, y, w, h, False
     elif content_state == 'left':
-        # Content on left half → professor on right, same size as centered (no shrink).
-        h = OH * center_scale
+        # Content on left half → professor on right at right_scale height,
+        # bottom-aligned so the standing figure looks grounded in the frame.
+        h = OH * right_scale
         w = h * fac_aspect
         x = OW - w - OW * margin
-        y = (OH - h) / 2.0   # vertically centered, same as center mode
+        y = OH - h   # bottom-aligned
         return x, y, w, h, True
     else:  # 'blank' or 'photo'
         h = OH * center_scale

@@ -146,8 +146,9 @@ def _fill_bullets(slide, idx, bullets):
         _etree.SubElement(bodyPr, qn('a:normAutofit'))
 
     # spcBef in hundredths-of-a-point: fewer bullets → more breathing room
+    # Values lifted to give better vertical balance at all slide densities.
     n = max(1, len(bullets))
-    spc = {1: 2400, 2: 1800, 3: 1200, 4: 800, 5: 400}.get(n, 200)
+    spc = {1: 3200, 2: 2400, 3: 1800, 4: 1200, 5: 800}.get(n, 400)
 
     for b in bullets:
         ap   = _etree.SubElement(txBody, qn('a:p'))
@@ -203,19 +204,20 @@ def _write_notes(slide, text):
 
 
 def _clean_layout_prompts(prs):
-    """Wipe prompt/hint paragraphs from the bullets layout's body placeholder.
+    """Wipe prompt/hint text from the bullets layout's body AND module-title placeholders.
 
     LibreOffice merges the LAYOUT's <a:p> nodes with the slide's <a:p> nodes
-    during rendering, causing "Click to edit text" and empty paragraphs to
-    appear ghost-style between real bullets. Clearing the layout paragraphs
-    once (after loading the template, before building slides) eliminates this.
+    during rendering, causing "Click to edit text", empty paragraphs, or
+    stale course-code labels (e.g. "ATM PGC LAI M9") to appear ghost-style.
+    Clearing both PH_BODY and PH_MOD_TITLE once (after loading the template,
+    before building slides) eliminates both artefacts.
     """
     for master in prs.slide_masters:
         for layout in master.slide_layouts:
             if layout.name != L_BULLETS:
                 continue
             for ph in layout.placeholders:
-                if ph.placeholder_format.idx != PH_BODY:
+                if ph.placeholder_format.idx not in (PH_BODY, PH_MOD_TITLE):
                     continue
                 txBody = ph._element.find(qn('p:txBody'))
                 if txBody is None:
@@ -326,8 +328,8 @@ def _build_bullets_slide(prs, sd, img_path, doc_title=""):
     layout = _find_layout(prs, L_BULLETS)
     slide  = prs.slides.add_slide(layout)
 
-    # Top banner and title
-    _fill_ph(slide, PH_MOD_TITLE, doc_title, size=11)
+    # Slide title (module-title banner is intentionally left blank — cleared in
+    # _clean_layout_prompts to avoid stale course-code labels from the template)
     # Override italic/color from placeholder default (template default is italic teal)
     _fill_ph(slide, PH_TITLE, sd.get("title", ""),
              bold=True, italic=False, color=RGBColor(0x1A, 0x1A, 0x2E))

@@ -88,9 +88,9 @@ def run_poc3(docx_path: str, output_dir: str) -> dict:
     print()
 
     # ── Stage 4 ───────────────────────────────────────────────────────────────
-    openai_key = os.environ.get("OPENAI_API_KEY")
+    openai_key = os.environ.get("AZURE_OPENAI_API_KEY")
     if not openai_key:
-        print("[INFO] OPENAI_API_KEY not set — TTS will use gTTS (free fallback)")
+        print("[INFO] AZURE_OPENAI_API_KEY not set — TTS will use edge-tts/gTTS (free fallback)")
     m4 = run_stage4(m2["storyboard"], m3["pptx"], output_dir,
                     openai_api_key=openai_key)
 
